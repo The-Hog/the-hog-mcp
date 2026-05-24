@@ -83,6 +83,109 @@ test('async primitive tools strip MCP controls, set idempotency, and poll when r
   });
 });
 
+test('mutating primitive tools expose idempotency and risk annotations', async () => {
+  const sampleInputs: Record<string, Record<string, unknown>> = {
+    search_companies: { query: 'security companies' },
+    search_people: { query: 'security engineers' },
+    enrich_contact: { identifier: { email: 'ada@example.com' }, fields: ['contact.email'] },
+    enrich_contacts: {
+      identifiers: [{ email: 'ada@example.com' }],
+      fields: ['contact.email'],
+    },
+    start_deep_research: {
+      prompt: 'Research Acme',
+      schema: { type: 'object', properties: {}, additionalProperties: true },
+    },
+    submit_search: { type: 'web_search', query: 'the hog api' },
+    search_web: { query: 'the hog api' },
+    crawl_website: { url: 'https://example.com' },
+    scrape_web_page: { url: 'https://example.com' },
+    get_instagram_profile: { username: 'example' },
+    list_instagram_posts: { username: 'example' },
+    get_instagram_post: { postUrl: 'https://www.instagram.com/p/example/' },
+    list_instagram_post_comments: {
+      postUrl: 'https://www.instagram.com/p/example/',
+    },
+    list_instagram_followers: { username: 'example' },
+    list_instagram_following: { username: 'example' },
+    get_tiktok_profile: { username: 'example' },
+    create_monitor: {
+      name: 'Site monitor',
+      type: 'site_search',
+      config: { site: 'example.com', query: 'security' },
+    },
+    update_monitor: { id: 'mon_1', name: 'Updated monitor' },
+    run_monitor_now: { id: 'mon_1' },
+  };
+
+  const mutatingTools = primitiveTools.filter(
+    (tool) => tool.endpoint.method === 'POST' || tool.endpoint.method === 'PATCH',
+  );
+  assert.equal(
+    mutatingTools.every((tool) => tool.name in sampleInputs),
+    true,
+  );
+
+  for (const tool of mutatingTools) {
+    assert.ok(tool.inputSchema.idempotencyKey, `${tool.name} exposes idempotencyKey`);
+    assert.deepEqual(
+      {
+        readOnlyHint: tool.annotations.readOnlyHint,
+        destructiveHint: tool.annotations.destructiveHint,
+        idempotentHint: tool.annotations.idempotentHint,
+      },
+      { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+      `${tool.name} annotations`,
+    );
+
+    const requests: Array<{ body?: unknown; idempotencyKey?: string }> = [];
+    await tool.execute(
+      { ...sampleInputs[tool.name], idempotencyKey: `idem_${tool.name}` },
+      {
+        request: async (request: { body?: unknown; idempotencyKey?: string }) => {
+          requests.push(request);
+          return { data: { id: 'result_1', operationId: 'op_1' }, status: 200, requestId: null };
+        },
+        createIdempotencyKey: () => `generated_${tool.name}`,
+      } as never,
+    );
+
+    assert.equal(requests[0].idempotencyKey, `idem_${tool.name}`, tool.name);
+    assert.equal(
+      JSON.stringify(requests[0].body).includes('idempotencyKey'),
+      false,
+      `${tool.name} strips idempotencyKey from body`,
+    );
+  }
+});
+
+test('read-only and destructive primitive tools expose risk annotations', () => {
+  const readOnlyTools = primitiveTools.filter((tool) => tool.endpoint.method === 'GET');
+  assert.ok(readOnlyTools.length > 0);
+  for (const tool of readOnlyTools) {
+    assert.deepEqual(
+      {
+        readOnlyHint: tool.annotations.readOnlyHint,
+        destructiveHint: tool.annotations.destructiveHint,
+        idempotentHint: tool.annotations.idempotentHint,
+      },
+      { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
+      tool.name,
+    );
+  }
+
+  const deleteMonitor = primitiveTools.find((tool) => tool.name === 'delete_monitor');
+  assert.ok(deleteMonitor);
+  assert.deepEqual(
+    {
+      readOnlyHint: deleteMonitor.annotations.readOnlyHint,
+      destructiveHint: deleteMonitor.annotations.destructiveHint,
+      idempotentHint: deleteMonitor.annotations.idempotentHint,
+    },
+    { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
+  );
+});
+
 test('start_deep_research schema matches the public request body', () => {
   const tool = primitiveTools.find((candidate) => candidate.name === 'start_deep_research');
   assert.ok(tool);

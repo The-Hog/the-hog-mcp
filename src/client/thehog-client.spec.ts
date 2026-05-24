@@ -37,7 +37,51 @@ test('request sends bearer auth, idempotency, and JSON body', async () => {
   ]);
   assert.equal(headers.get('authorization'), `Bearer ${apiKey}`);
   assert.equal(headers.get('idempotency-key'), 'idem_1');
+  assert.equal(seen[0].init.redirect, 'manual');
   assert.equal(seen[0].init.body, '{"query":"acme"}');
+});
+
+test('request does not follow redirects with credential headers', async () => {
+  const accessKey = ['ak', 'test-key'].join('_');
+  const secretKey = ['sk', 'test-key'].join('_');
+  const leakedHeaders: Array<{ accessKey: string | null; secretKey: string | null }> = [];
+  const fetchImpl: FetchLike = async (_url, init) => {
+    const headers = init?.headers as Headers;
+    if (init?.redirect !== 'manual') {
+      leakedHeaders.push({
+        accessKey: headers.get('x-access-key'),
+        secretKey: headers.get('x-secret-key'),
+      });
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }
+    return new Response(null, {
+      status: 302,
+      headers: {
+        location: 'https://example.invalid/capture',
+        'x-request-id': 'req_redirect',
+      },
+    });
+  };
+  const client = new TheHogClient(
+    {
+      apiBaseUrl: 'https://developer.thehog.ai',
+      accessKey,
+      secretKey,
+    },
+    fetchImpl,
+  );
+
+  await assert.rejects(
+    () => client.request({ method: 'GET', path: '/api/operations/op_1' }),
+    (error) => {
+      assert.ok(error instanceof TheHogApiError);
+      assert.equal(error.status, 302);
+      assert.equal(error.requestId, 'req_redirect');
+      assert.match(error.message, /redirects are not followed/);
+      return true;
+    },
+  );
+  assert.deepEqual(leakedHeaders, []);
 });
 
 test('request skips empty scalar and array query values', async () => {

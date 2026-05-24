@@ -6,12 +6,16 @@ import type { McpToolDefinition } from './types.js';
 
 test('failed workflow results are returned as MCP tool errors', async () => {
   let handler: unknown;
+  let config: {
+    annotations?: unknown;
+  } = {};
   const server = {
     registerTool: (
       _name: string,
-      _config: unknown,
+      toolConfig: unknown,
       callback: (input: unknown) => Promise<unknown>,
     ) => {
+      config = toolConfig as typeof config;
       handler = callback;
     },
   };
@@ -21,6 +25,12 @@ test('failed workflow results are returned as MCP tool errors', async () => {
       description: 'Build a prospect list.',
       inputSchema: {
         query: z.string(),
+      },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: true,
       },
       execute: async () => ({
         workflow: 'build_prospect_list',
@@ -33,6 +43,12 @@ test('failed workflow results are returned as MCP tool errors', async () => {
   registerToolDefinitions(server as never, {} as never, tools);
 
   assert.equal(typeof handler, 'function');
+  assert.deepEqual(config.annotations, {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false,
+    openWorldHint: true,
+  });
   const result = (await (handler as (input: unknown) => Promise<unknown>)({
     query: 'security startups',
   })) as McpTextResult;
@@ -62,6 +78,12 @@ test('failed operation payloads returned by primitive status tools remain succes
       description: 'Get an operation.',
       inputSchema: {
         id: z.string(),
+      },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
       },
       execute: async () => ({
         id: 'op_1',

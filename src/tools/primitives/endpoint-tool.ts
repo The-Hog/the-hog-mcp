@@ -18,6 +18,14 @@ export function endpointTool(options: EndpointToolOptions): PrimitiveToolDefinit
     name: options.name,
     description: options.description,
     inputSchema: options.inputSchema,
+    annotations: {
+      readOnlyHint: method === 'GET',
+      destructiveHint: options.requireConfirm === true || method === 'DELETE',
+      idempotentHint:
+        method === 'GET' || (options.idempotent === true && options.requireConfirm !== true),
+      openWorldHint: options.openWorld ?? method !== 'GET',
+      ...options.annotations,
+    },
     endpoint: { method, path: endpointPath },
     execute: async (input, client) => {
       if (options.requireConfirm && input.confirm !== true) {

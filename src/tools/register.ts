@@ -17,6 +17,7 @@ export function registerToolDefinitions(
         title: titleFromToolName(tool.name),
         description: tool.description,
         inputSchema: tool.inputSchema,
+        annotations: tool.annotations,
       },
       async (rawInput) => {
         try {

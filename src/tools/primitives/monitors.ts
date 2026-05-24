@@ -1,5 +1,6 @@
 import { z } from 'zod/v4';
 import {
+  idempotencyField,
   jsonObjectSchema,
   monitorTypeSchema,
   paginationFields,
@@ -25,7 +26,9 @@ export const monitorPrimitiveTools: PrimitiveToolDefinition[] = [
       force_fresh: z.boolean().optional(),
       cache_ttl_days: z.number().min(1).max(90).optional(),
       post_url: z.string().min(1).optional(),
+      ...idempotencyField,
     },
+    idempotent: true,
   }),
   endpointTool({
     name: 'list_monitors',
@@ -63,8 +66,10 @@ export const monitorPrimitiveTools: PrimitiveToolDefinition[] = [
       force_fresh: z.boolean().optional(),
       cache_ttl_days: z.number().min(1).max(90).optional(),
       status: z.enum(['active', 'paused']).optional(),
+      ...idempotencyField,
     },
-    body: (input) => omit(input, ['id']),
+    body: (input) => omit(input, ['id', 'idempotencyKey']),
+    idempotent: true,
   }),
   endpointTool({
     name: 'delete_monitor',
@@ -89,8 +94,10 @@ export const monitorPrimitiveTools: PrimitiveToolDefinition[] = [
     inputSchema: {
       id: z.string().min(1),
       force_fresh: z.boolean().optional(),
+      ...idempotencyField,
     },
-    body: (input) => omit(input, ['id']),
+    body: (input) => omit(input, ['id', 'idempotencyKey']),
+    idempotent: true,
   }),
   endpointTool({
     name: 'list_monitor_events',

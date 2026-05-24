@@ -20,7 +20,7 @@ export const idempotencyField = {
     .min(1)
     .max(256)
     .optional()
-    .describe('Optional idempotency key. If omitted, the MCP server generates one for mutating async requests.'),
+    .describe('Optional idempotency key. If omitted, the MCP server generates one for mutating requests.'),
 };
 
 export const paginationFields = {

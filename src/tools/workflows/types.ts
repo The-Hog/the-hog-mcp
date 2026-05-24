@@ -1,6 +1,14 @@
 import type { McpToolDefinition } from '../types.js';
+import type { ToolAnnotations } from '@modelcontextprotocol/sdk/types.js';
 
 export type WorkflowToolDefinition = McpToolDefinition;
+
+export const workflowToolAnnotations: ToolAnnotations = {
+  readOnlyHint: false,
+  destructiveHint: false,
+  idempotentHint: false,
+  openWorldHint: true,
+};
 
 export interface WorkflowWarning {
   step: string;

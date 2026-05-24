@@ -42,6 +42,7 @@ export class TheHogClient {
     const init: RequestInit = {
       method: request.method,
       headers,
+      redirect: 'manual',
       signal: controller.signal,
       ...(request.body === undefined
         ? {}
@@ -67,6 +68,14 @@ export class TheHogClient {
     }
 
     const requestId = response.headers.get('x-request-id');
+    if (response.status >= 300 && response.status < 400) {
+      throw new TheHogApiError(
+        `The Hog API returned HTTP ${response.status}; redirects are not followed by this MCP client.`,
+        response.status,
+        requestId,
+        payload,
+      );
+    }
     if (!response.ok) {
       const message = errorMessageForResponse(response.status, payload);
       throw new TheHogApiError(message, response.status, requestId, payload);

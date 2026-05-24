@@ -1,4 +1,5 @@
 import type { HttpMethod } from '../../client/thehog-client.js';
+import type { ToolAnnotations } from '@modelcontextprotocol/sdk/types.js';
 import type { McpToolDefinition, ToolInput, ToolShape } from '../types.js';
 
 export type PollKind = 'operation' | 'search' | 'enrichment';
@@ -23,5 +24,7 @@ export interface EndpointToolOptions {
   idempotent?: boolean;
   poll?: PollKind;
   requireConfirm?: boolean;
+  openWorld?: boolean;
+  annotations?: Partial<ToolAnnotations>;
   endpointPath: string;
 }

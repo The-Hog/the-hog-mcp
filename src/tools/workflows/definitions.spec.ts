@@ -51,6 +51,26 @@ test('workflow tool schemas expose only curated public inputs', () => {
   ]);
 });
 
+test('workflow annotations do not promise whole-workflow idempotency', () => {
+  for (const tool of workflowTools) {
+    assert.deepEqual(
+      {
+        readOnlyHint: tool.annotations.readOnlyHint,
+        destructiveHint: tool.annotations.destructiveHint,
+        idempotentHint: tool.annotations.idempotentHint,
+        openWorldHint: tool.annotations.openWorldHint,
+      },
+      {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: true,
+      },
+      tool.name,
+    );
+  }
+});
+
 test('build prospect list chains company search, people search, and enrichment', async () => {
   const tool = workflowTools.find((candidate) => candidate.name === 'build_prospect_list');
   assert.ok(tool);

@@ -1,4 +1,5 @@
 import { z } from 'zod/v4';
+import { idempotencyField } from '../schemas.js';
 import { socialLimit } from './common.js';
 import { endpointTool } from './endpoint-tool.js';
 import type { PrimitiveToolDefinition } from './types.js';
@@ -11,7 +12,9 @@ export const socialPrimitiveTools: PrimitiveToolDefinition[] = [
     method: 'POST',
     path: '/api/v1/platform/scrapers/instagram/profile',
     endpointPath: '/api/v1/platform/scrapers/instagram/profile',
-    inputSchema: { username: z.string().min(1) },
+    inputSchema: { username: z.string().min(1), ...idempotencyField },
+    idempotent: true,
+    openWorld: true,
   }),
   endpointTool({
     name: 'list_instagram_posts',
@@ -23,7 +26,10 @@ export const socialPrimitiveTools: PrimitiveToolDefinition[] = [
     inputSchema: {
       username: z.string().min(1),
       maxPosts: socialLimit(200, 'Maximum posts to request.'),
+      ...idempotencyField,
     },
+    idempotent: true,
+    openWorld: true,
   }),
   endpointTool({
     name: 'get_instagram_post',
@@ -32,7 +38,9 @@ export const socialPrimitiveTools: PrimitiveToolDefinition[] = [
     method: 'POST',
     path: '/api/v1/platform/scrapers/instagram/post-details',
     endpointPath: '/api/v1/platform/scrapers/instagram/post-details',
-    inputSchema: { postUrl: z.string().min(1) },
+    inputSchema: { postUrl: z.string().min(1), ...idempotencyField },
+    idempotent: true,
+    openWorld: true,
   }),
   endpointTool({
     name: 'list_instagram_post_comments',
@@ -45,7 +53,10 @@ export const socialPrimitiveTools: PrimitiveToolDefinition[] = [
       postUrl: z.string().min(1),
       maxComments: socialLimit(200, 'Maximum comments to request.'),
       includeNested: z.boolean().optional(),
+      ...idempotencyField,
     },
+    idempotent: true,
+    openWorld: true,
   }),
   endpointTool({
     name: 'list_instagram_followers',
@@ -57,7 +68,10 @@ export const socialPrimitiveTools: PrimitiveToolDefinition[] = [
     inputSchema: {
       username: z.string().min(1),
       maxFollowers: socialLimit(5000, 'Maximum followers to request.'),
+      ...idempotencyField,
     },
+    idempotent: true,
+    openWorld: true,
   }),
   endpointTool({
     name: 'list_instagram_following',
@@ -69,7 +83,10 @@ export const socialPrimitiveTools: PrimitiveToolDefinition[] = [
     inputSchema: {
       username: z.string().min(1),
       maxFollowing: socialLimit(5000, 'Maximum following accounts to request.'),
+      ...idempotencyField,
     },
+    idempotent: true,
+    openWorld: true,
   }),
   endpointTool({
     name: 'get_tiktok_profile',
@@ -81,6 +98,9 @@ export const socialPrimitiveTools: PrimitiveToolDefinition[] = [
     inputSchema: {
       username: z.string().min(1),
       maxVideos: socialLimit(500, 'Maximum videos to request.'),
+      ...idempotencyField,
     },
+    idempotent: true,
+    openWorld: true,
   }),
 ];
