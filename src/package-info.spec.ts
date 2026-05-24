@@ -23,6 +23,7 @@ const packageJson = require('../package.json') as {
     url?: string;
   };
   scripts?: Record<string, string>;
+  engines?: Record<string, string>;
 };
 
 test('packageVersion reads package metadata', () => {
@@ -49,6 +50,9 @@ test('package metadata is safe to publish publicly', () => {
     'thehog-mcp': 'dist/index.js',
   });
   assert.deepEqual(packageJson.files, ['dist', 'LICENSE', 'README.md', 'package.json']);
+  assert.deepEqual(packageJson.engines, {
+    node: '>=22',
+  });
   assert.equal(
     packageJson.scripts?.['release:check'],
     'npm test && npm run test:openapi && npm run pack:dry-run',
@@ -59,7 +63,7 @@ test('package metadata is safe to publish publicly', () => {
   );
   assert.equal(
     packageJson.scripts?.test,
-    "tsc -p tsconfig.spec.json && find dist-test -name '*.spec.js' -print0 | xargs -0 node --test",
+    'tsc -p tsconfig.spec.json && node scripts/run-tests.mjs',
   );
   assert.equal(
     packageJson.scripts?.['pack:dry-run'],

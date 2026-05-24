@@ -30,7 +30,7 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "test": "tsc -p tsconfig.spec.json && find dist-test -name '*.spec.js' -print0 | xargs -0 node --test",
+    "test": "tsc -p tsconfig.spec.json && node scripts/run-tests.mjs",
     "test:openapi": "tsc -p tsconfig.spec.json && THEHOG_RUN_OPENAPI_DRIFT=1 node --test \"dist-test/tools/primitives/openapi-drift.spec.js\"",
     "release:check": "npm test && npm run test:openapi && npm run pack:dry-run",
     "prepack": "npm test && npm run build",
@@ -50,7 +50,7 @@
     "typescript": "^5.7.3"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "license": "MIT",
   "private": false

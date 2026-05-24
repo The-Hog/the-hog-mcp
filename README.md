@@ -50,7 +50,7 @@ codex mcp add thehog --env THEHOG_API_KEY=YOUR_THEHOG_API_KEY -- npx -y @thehog/
 
 ## Security
 
-The server runs locally over stdio and calls `https://developer.thehog.ai` with your The Hog API credentials. It does not host a public endpoint and does not require OAuth for local stdio use. Do not commit MCP config files that contain real API keys.
+The server runs locally over stdio and calls The Hog API endpoints under `https://developer.thehog.ai/api/...` with your The Hog API credentials. The configurable base URL is `https://developer.thehog.ai`; endpoint paths include `/api/...`. It does not host a public endpoint and does not require OAuth for local stdio use. Do not commit MCP config files that contain real API keys.
 
 ## Source
 
