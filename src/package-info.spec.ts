@@ -18,6 +18,9 @@ const packageJson = require('../package.json') as {
     access?: string;
     registry?: string;
   };
+  main?: string;
+  types?: string;
+  exports?: Record<string, unknown>;
   repository?: {
     type?: string;
     url?: string;
@@ -46,8 +49,16 @@ test('package metadata is safe to publish publicly', () => {
     type: 'git',
     url: 'git+https://github.com/The-Hog/the-hog-mcp.git',
   });
+  assert.equal(packageJson.main, 'dist/index.js');
+  assert.equal(packageJson.types, 'dist/index.d.ts');
   assert.deepEqual(packageJson.bin, {
-    'thehog-mcp': 'dist/index.js',
+    'thehog-mcp': 'dist/cli.js',
+  });
+  assert.deepEqual(packageJson.exports, {
+    '.': {
+      types: './dist/index.d.ts',
+      import: './dist/index.js',
+    },
   });
   assert.deepEqual(packageJson.files, ['dist', 'LICENSE', 'README.md', 'package.json']);
   assert.deepEqual(packageJson.engines, {

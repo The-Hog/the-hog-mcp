@@ -1,17 +1,34 @@
-#!/usr/bin/env node
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { loadConfig } from './config.js';
-import { createServer } from './server.js';
-import { redactString } from './client/redaction.js';
+export type {
+  HttpMethod,
+  TheHogRequest,
+  TheHogResponse,
+  TheHogToolClient,
+} from './client/thehog-client.js';
 
-async function main(): Promise<void> {
-  const server = createServer(loadConfig());
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
-}
+export { registerToolDefinitions } from './tools/register.js';
+export type {
+  RegisterToolDefinitionsOptions,
+  ToolClientProvider,
+  ToolRequestContext,
+} from './tools/register.js';
+export type {
+  McpToolDefinition,
+  ToolInput,
+  ToolShape,
+} from './tools/types.js';
 
-main().catch((error) => {
-  const message = error instanceof Error ? error.message : String(error);
-  process.stderr.write(`${redactString(message)}\n`);
-  process.exitCode = 1;
-});
+export { primitiveTools } from './tools/primitives/definitions.js';
+export type { PublicPrimitiveToolName } from './tools/primitives/definitions.js';
+export { registerPrimitiveTools } from './tools/primitives/register.js';
+export type {
+  PrimitiveToolDefinition,
+} from './tools/primitives/types.js';
+
+export { workflowTools } from './tools/workflows/definitions.js';
+export { registerWorkflowTools } from './tools/workflows/register.js';
+export type {
+  WorkflowContext,
+  WorkflowStepResult,
+  WorkflowToolDefinition,
+  WorkflowWarning,
+} from './tools/workflows/types.js';

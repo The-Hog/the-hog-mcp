@@ -12,8 +12,9 @@ export function createServer(config: TheHogMcpConfig): McpServer {
     version: packageVersion,
   });
   const client = new TheHogClient(config);
-  registerPrimitiveTools(server, client);
-  registerWorkflowTools(server, client);
+  const toolOptions = { getClient: () => client };
+  registerPrimitiveTools(server, toolOptions);
+  registerWorkflowTools(server, toolOptions);
   registerResources(server);
   return server;
 }

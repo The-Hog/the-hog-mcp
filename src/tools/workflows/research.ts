@@ -1,5 +1,5 @@
 import { z } from 'zod/v4';
-import type { TheHogClient } from '../../client/thehog-client.js';
+import type { TheHogToolClient } from '../../client/thehog-client.js';
 import {
   idempotencyField,
   jsonObjectSchema,
@@ -115,7 +115,7 @@ export const researchWorkflowTools: WorkflowToolDefinition[] = [
   },
 ];
 
-async function researchCompany(input: ToolInput, client: TheHogClient) {
+async function researchCompany(input: ToolInput, client: TheHogToolClient) {
   const ctx = createWorkflowContext('research_company');
   const anchors: Array<Record<string, unknown>> = [];
   const urls: string[] = [];
@@ -189,7 +189,7 @@ async function researchCompany(input: ToolInput, client: TheHogClient) {
   };
 }
 
-async function researchPerson(input: ToolInput, client: TheHogClient) {
+async function researchPerson(input: ToolInput, client: TheHogToolClient) {
   const ctx = createWorkflowContext('research_person');
   const anchors: Array<Record<string, unknown>> = [];
   const identifier = personIdentifierFromInput(input);
@@ -266,7 +266,7 @@ async function researchPerson(input: ToolInput, client: TheHogClient) {
   };
 }
 
-async function scrapeAndExtract(input: ToolInput, client: TheHogClient) {
+async function scrapeAndExtract(input: ToolInput, client: TheHogToolClient) {
   const ctx = createWorkflowContext('scrape_and_extract');
   const scrapeStep = await runWorkflowStep(client, ctx, {
     step: 'scrape_web_page',

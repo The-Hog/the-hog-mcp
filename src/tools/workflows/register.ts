@@ -1,11 +1,11 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import type { TheHogClient } from '../../client/thehog-client.js';
+import type { RegisterToolDefinitionsOptions } from '../register.js';
 import { registerToolDefinitions } from '../register.js';
 import { workflowTools } from './definitions.js';
 
 export function registerWorkflowTools(
   server: McpServer,
-  client: TheHogClient,
+  options: RegisterToolDefinitionsOptions,
 ): void {
-  registerToolDefinitions(server, client, workflowTools);
+  registerToolDefinitions(server, workflowTools, options);
 }

@@ -1,13 +1,25 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
+import type { ServerNotification, ServerRequest } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod/v4';
-import type { TheHogClient } from '../client/thehog-client.js';
+import type { TheHogToolClient } from '../client/thehog-client.js';
 import { errorResult, jsonErrorResult, jsonResult } from './format.js';
 import type { McpToolDefinition } from './types.js';
 
+export type ToolRequestContext = RequestHandlerExtra<ServerRequest, ServerNotification>;
+
+export type ToolClientProvider = (
+  context: ToolRequestContext,
+) => TheHogToolClient | Promise<TheHogToolClient>;
+
+export interface RegisterToolDefinitionsOptions {
+  getClient: ToolClientProvider;
+}
+
 export function registerToolDefinitions(
   server: McpServer,
-  client: TheHogClient,
   tools: McpToolDefinition[],
+  options: RegisterToolDefinitionsOptions,
 ): void {
   for (const tool of tools) {
     const schema = z.object(tool.inputSchema).strict();
@@ -19,9 +31,10 @@ export function registerToolDefinitions(
         inputSchema: tool.inputSchema,
         annotations: tool.annotations,
       },
-      async (rawInput) => {
+      async (rawInput, context) => {
         try {
           const input = schema.parse(rawInput);
+          const client = await options.getClient(context);
           const result = await tool.execute(input, client);
           const payload = asObject(result);
           if (isFailedWorkflowResult(payload)) {

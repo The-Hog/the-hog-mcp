@@ -1,4 +1,4 @@
-import type { TheHogClient } from './thehog-client.js';
+import type { TheHogToolClient } from './thehog-client.js';
 
 export interface PollOptions {
   timeoutSeconds?: number;
@@ -25,7 +25,7 @@ const TERMINAL_STATUSES = new Set([
 ]);
 
 export async function pollOperation(
-  client: TheHogClient,
+  client: TheHogToolClient,
   operationId: string,
   options: PollOptions = {},
 ): Promise<PollResult> {
@@ -33,7 +33,7 @@ export async function pollOperation(
 }
 
 export async function pollSearchResult(
-  client: TheHogClient,
+  client: TheHogToolClient,
   searchId: string,
   options: PollOptions = {},
 ): Promise<PollResult> {
@@ -41,7 +41,7 @@ export async function pollSearchResult(
 }
 
 export async function pollEnrichment(
-  client: TheHogClient,
+  client: TheHogToolClient,
   enrichmentId: string,
   options: PollOptions = {},
 ): Promise<PollResult> {
@@ -49,7 +49,7 @@ export async function pollEnrichment(
 }
 
 async function pollPath(
-  client: TheHogClient,
+  client: TheHogToolClient,
   path: string,
   options: PollOptions,
 ): Promise<PollResult> {

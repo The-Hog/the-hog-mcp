@@ -1,5 +1,5 @@
 import { z } from 'zod/v4';
-import type { TheHogClient } from '../../client/thehog-client.js';
+import type { TheHogToolClient } from '../../client/thehog-client.js';
 import {
   idempotencyField,
   personIdentifierSchema,
@@ -84,7 +84,7 @@ export const prospectingWorkflowTools: WorkflowToolDefinition[] = [
   },
 ];
 
-async function buildProspectList(input: ToolInput, client: TheHogClient) {
+async function buildProspectList(input: ToolInput, client: TheHogToolClient) {
   const ctx = createWorkflowContext('build_prospect_list');
   const companyLimit = clampInt(input.companyLimit, 10, 1, 50);
   const peoplePerCompany = clampInt(input.peoplePerCompany, 3, 1, 20);
@@ -198,7 +198,7 @@ async function buildProspectList(input: ToolInput, client: TheHogClient) {
   };
 }
 
-async function findPeopleAtTargetAccounts(input: ToolInput, client: TheHogClient) {
+async function findPeopleAtTargetAccounts(input: ToolInput, client: TheHogToolClient) {
   const ctx = createWorkflowContext('find_people_at_target_accounts');
   const domains = uniqueStrings(readStringArray(input.companyDomains));
   const names = uniqueStrings(readStringArray(input.companyNames));
@@ -266,7 +266,7 @@ async function findPeopleAtTargetAccounts(input: ToolInput, client: TheHogClient
   };
 }
 
-async function enrichProspectList(input: ToolInput, client: TheHogClient) {
+async function enrichProspectList(input: ToolInput, client: TheHogToolClient) {
   const ctx = createWorkflowContext('enrich_prospect_list');
   const enrichmentStep = await runWorkflowStep(client, ctx, {
     step: 'enrich_contacts',
@@ -299,7 +299,7 @@ async function enrichProspectList(input: ToolInput, client: TheHogClient) {
 }
 
 async function enrichPeopleFromItems(
-  client: TheHogClient,
+  client: TheHogToolClient,
   ctx: ReturnType<typeof createWorkflowContext>,
   input: ToolInput,
   people: unknown[],

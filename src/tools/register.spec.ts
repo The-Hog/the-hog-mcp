@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { z } from 'zod/v4';
 import { registerToolDefinitions } from './register.js';
+import type { TheHogToolClient } from '../client/thehog-client.js';
 import type { McpToolDefinition } from './types.js';
 
 test('failed workflow results are returned as MCP tool errors', async () => {
@@ -40,7 +41,7 @@ test('failed workflow results are returned as MCP tool errors', async () => {
     },
   ];
 
-  registerToolDefinitions(server as never, {} as never, tools);
+  registerToolDefinitions(server as never, tools, { getClient: () => stubClient });
 
   assert.equal(typeof handler, 'function');
   assert.deepEqual(config.annotations, {
@@ -49,9 +50,12 @@ test('failed workflow results are returned as MCP tool errors', async () => {
     idempotentHint: false,
     openWorldHint: true,
   });
-  const result = (await (handler as (input: unknown) => Promise<unknown>)({
-    query: 'security startups',
-  })) as McpTextResult;
+  const result = (await (handler as (input: unknown, context: unknown) => Promise<unknown>)(
+    {
+      query: 'security startups',
+    },
+    {},
+  )) as McpTextResult;
   const payload = JSON.parse(result.content[0]?.text ?? '{}') as {
     ok?: boolean;
     tool?: string;
@@ -93,12 +97,15 @@ test('failed operation payloads returned by primitive status tools remain succes
     },
   ];
 
-  registerToolDefinitions(server as never, {} as never, tools);
+  registerToolDefinitions(server as never, tools, { getClient: () => stubClient });
 
   assert.equal(typeof handler, 'function');
-  const result = (await (handler as (input: unknown) => Promise<unknown>)({
-    id: 'op_1',
-  })) as McpTextResult;
+  const result = (await (handler as (input: unknown, context: unknown) => Promise<unknown>)(
+    {
+      id: 'op_1',
+    },
+    {},
+  )) as McpTextResult;
   const payload = JSON.parse(result.content[0]?.text ?? '{}') as {
     ok?: boolean;
   };
@@ -110,3 +117,12 @@ interface McpTextResult {
   content: Array<{ text?: string }>;
   isError?: boolean;
 }
+
+const stubClient: TheHogToolClient = {
+  request: async () => {
+    throw new Error('stubClient.request is not used in this test.');
+  },
+  createIdempotencyKey: () => {
+    throw new Error('stubClient.createIdempotencyKey is not used in this test.');
+  },
+};

@@ -1,5 +1,5 @@
 import { z } from 'zod/v4';
-import type { TheHogClient } from '../../client/thehog-client.js';
+import type { TheHogToolClient } from '../../client/thehog-client.js';
 import type { ToolInput } from '../types.js';
 import { workflowToolAnnotations, type WorkflowToolDefinition } from './types.js';
 import {
@@ -25,7 +25,7 @@ export const socialWorkflowTools: WorkflowToolDefinition[] = [
   },
 ];
 
-async function analyzeSocialProfile(input: ToolInput, client: TheHogClient) {
+async function analyzeSocialProfile(input: ToolInput, client: TheHogToolClient) {
   const ctx = createWorkflowContext('analyze_social_profile');
   const username = String(input.username);
   const maxPosts = clampInt(input.maxPosts, 12, 1, 50);

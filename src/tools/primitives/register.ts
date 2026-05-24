@@ -1,11 +1,11 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import type { TheHogClient } from '../../client/thehog-client.js';
+import type { RegisterToolDefinitionsOptions } from '../register.js';
 import { registerToolDefinitions } from '../register.js';
 import { primitiveTools } from './definitions.js';
 
 export function registerPrimitiveTools(
   server: McpServer,
-  client: TheHogClient,
+  options: RegisterToolDefinitionsOptions,
 ): void {
-  registerToolDefinitions(server, client, primitiveTools);
+  registerToolDefinitions(server, primitiveTools, options);
 }

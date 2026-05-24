@@ -20,11 +20,16 @@ export interface TheHogResponse<T = unknown> {
   requestId: string | null;
 }
 
+export interface TheHogToolClient {
+  request<T = unknown>(request: TheHogRequest): Promise<TheHogResponse<T>>;
+  createIdempotencyKey(prefix?: string): string;
+}
+
 export type FetchLike = typeof fetch;
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 60_000;
 
-export class TheHogClient {
+export class TheHogClient implements TheHogToolClient {
   constructor(
     private readonly config: TheHogMcpConfig,
     private readonly fetchImpl: FetchLike = fetch,
