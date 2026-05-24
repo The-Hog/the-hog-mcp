@@ -6,7 +6,7 @@ import {
   waitFields,
 } from '../schemas.js';
 import type { ToolInput } from '../types.js';
-import type { WorkflowToolDefinition } from './types.js';
+import { workflowToolAnnotations, type WorkflowToolDefinition } from './types.js';
 import {
   clampInt,
   createWorkflowContext,
@@ -36,6 +36,7 @@ export const monitoringWorkflowTools: WorkflowToolDefinition[] = [
       ...waitFields,
       ...idempotencyField,
     },
+    annotations: workflowToolAnnotations,
     execute: monitorTopic,
   },
 ];

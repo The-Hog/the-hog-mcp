@@ -7,7 +7,7 @@ import {
   waitFields,
 } from '../schemas.js';
 import type { ToolInput } from '../types.js';
-import type { WorkflowToolDefinition } from './types.js';
+import { workflowToolAnnotations, type WorkflowToolDefinition } from './types.js';
 import {
   compactForAnchor,
   createWorkflowContext,
@@ -73,6 +73,7 @@ export const researchWorkflowTools: WorkflowToolDefinition[] = [
       ...waitFields,
       ...idempotencyField,
     },
+    annotations: workflowToolAnnotations,
     execute: researchCompany,
   },
   {
@@ -92,6 +93,7 @@ export const researchWorkflowTools: WorkflowToolDefinition[] = [
       ...waitFields,
       ...idempotencyField,
     },
+    annotations: workflowToolAnnotations,
     execute: researchPerson,
   },
   {
@@ -108,6 +110,7 @@ export const researchWorkflowTools: WorkflowToolDefinition[] = [
       ...waitFields,
       ...idempotencyField,
     },
+    annotations: workflowToolAnnotations,
     execute: scrapeAndExtract,
   },
 ];

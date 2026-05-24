@@ -1,4 +1,5 @@
 import { z } from 'zod/v4';
+import { idempotencyField } from '../schemas.js';
 import { endpointTool } from './endpoint-tool.js';
 import type { PrimitiveToolDefinition } from './types.js';
 
@@ -18,7 +19,10 @@ export const webPrimitiveTools: PrimitiveToolDefinition[] = [
       days: z.number().int().min(1).optional(),
       includeDomains: z.array(z.string().min(1)).optional(),
       excludeDomains: z.array(z.string().min(1)).optional(),
+      ...idempotencyField,
     },
+    idempotent: true,
+    openWorld: true,
   }),
   endpointTool({
     name: 'crawl_website',
@@ -31,7 +35,10 @@ export const webPrimitiveTools: PrimitiveToolDefinition[] = [
       url: z.string().min(1),
       limit: z.number().int().min(1).max(50).optional(),
       instructions: z.string().optional(),
+      ...idempotencyField,
     },
+    idempotent: true,
+    openWorld: true,
   }),
   endpointTool({
     name: 'scrape_web_page',
@@ -45,6 +52,9 @@ export const webPrimitiveTools: PrimitiveToolDefinition[] = [
       renderJs: z.boolean().optional(),
       maxAgeMs: z.number().int().min(0).max(30 * 24 * 60 * 60 * 1000).optional(),
       maxAgeDays: z.number().int().min(0).max(30).optional(),
+      ...idempotencyField,
     },
+    idempotent: true,
+    openWorld: true,
   }),
 ];

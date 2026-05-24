@@ -7,7 +7,7 @@ import {
   waitFields,
 } from '../schemas.js';
 import type { ToolInput } from '../types.js';
-import type { WorkflowToolDefinition } from './types.js';
+import { workflowToolAnnotations, type WorkflowToolDefinition } from './types.js';
 import {
   clampInt,
   createWorkflowContext,
@@ -57,6 +57,7 @@ export const prospectingWorkflowTools: WorkflowToolDefinition[] = [
       ...waitFields,
       ...idempotencyField,
     },
+    annotations: workflowToolAnnotations,
     execute: buildProspectList,
   },
   {
@@ -64,6 +65,7 @@ export const prospectingWorkflowTools: WorkflowToolDefinition[] = [
     description:
       'Find people at known target accounts by domain or company name. This may consume The Hog credits and can optionally enrich contacts. Defaults: 25 people and polling enabled.',
     inputSchema: targetAccountFields,
+    annotations: workflowToolAnnotations,
     execute: findPeopleAtTargetAccounts,
   },
   {
@@ -77,6 +79,7 @@ export const prospectingWorkflowTools: WorkflowToolDefinition[] = [
       ...waitFields,
       ...idempotencyField,
     },
+    annotations: workflowToolAnnotations,
     execute: enrichProspectList,
   },
 ];

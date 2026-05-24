@@ -1,7 +1,7 @@
 import { z } from 'zod/v4';
 import type { TheHogClient } from '../../client/thehog-client.js';
 import type { ToolInput } from '../types.js';
-import type { WorkflowToolDefinition } from './types.js';
+import { workflowToolAnnotations, type WorkflowToolDefinition } from './types.js';
 import {
   clampInt,
   createWorkflowContext,
@@ -20,6 +20,7 @@ export const socialWorkflowTools: WorkflowToolDefinition[] = [
       username: z.string().min(1).max(200),
       maxPosts: z.number().int().min(1).max(50).optional(),
     },
+    annotations: workflowToolAnnotations,
     execute: analyzeSocialProfile,
   },
 ];
