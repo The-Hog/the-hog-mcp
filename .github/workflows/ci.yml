@@ -1,0 +1,69 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Verify package (Node ${{ matrix.node-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version:
+          - '22'
+          - '24'
+          - '26'
+    env:
+      THEHOG_OPENAPI_SPEC_PATH: /tmp/thehog-openapi.json
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          registry-url: https://registry.npmjs.org
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Download public OpenAPI
+        run: curl --fail --silent --show-error --location https://docs.thehog.ai/api-reference/openapi.json --output "$THEHOG_OPENAPI_SPEC_PATH"
+
+      - name: Check package
+        run: npm run release:check
+
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Inspect package contents
+        run: |
+          set -euo pipefail
+          npm pack --dry-run --json --ignore-scripts > /tmp/thehog-mcp-pack.json
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const pack = JSON.parse(fs.readFileSync('/tmp/thehog-mcp-pack.json', 'utf8'))[0];
+          const paths = pack.files.map((file) => file.path).sort();
+          const invalid = paths.filter((path) => !(
+            path === 'README.md' ||
+            path === 'package.json' ||
+            path === 'LICENSE' ||
+            path.startsWith('dist/')
+          ));
+          if (invalid.length) {
+            console.error(`Unexpected package files: ${invalid.join(', ')}`);
+            process.exit(1);
+          }
+          console.log(`Package ${pack.name}@${pack.version} contains ${paths.length} files.`);
+          NODE

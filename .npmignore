@@ -1,0 +1,7 @@
+src/
+dist-test/
+node_modules/
+.github/
+.env*
+*.tgz
+*.tsbuildinfo

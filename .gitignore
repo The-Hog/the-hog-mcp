@@ -1,0 +1,6 @@
+dist/
+dist-test/
+node_modules/
+.env*
+*.tgz
+*.tsbuildinfo
