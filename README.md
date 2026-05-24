@@ -5,17 +5,15 @@ VS Code, and Windsurf.
 
 ## Quick Start
 
-Use a The Hog API key:
-
-```bash
-THEHOG_API_KEY=YOUR_THEHOG_API_KEY npx -y @thehog/mcp@latest
-```
-
-Access-key authentication is also supported:
+Use the API key and API secret from the Credentials page:
 
 ```bash
 THEHOG_ACCESS_KEY=YOUR_THEHOG_ACCESS_KEY THEHOG_SECRET_KEY=YOUR_THEHOG_SECRET_KEY npx -y @thehog/mcp@latest
 ```
+
+In the dashboard UI, the public API key is the MCP `THEHOG_ACCESS_KEY`. The API
+secret is the MCP `THEHOG_SECRET_KEY`. Both are required for dashboard-created
+credentials.
 
 Optional:
 
@@ -38,7 +36,8 @@ Most MCP clients can run this server as a local stdio process:
       "command": "npx",
       "args": ["-y", "@thehog/mcp@latest"],
       "env": {
-        "THEHOG_API_KEY": "YOUR_THEHOG_API_KEY"
+        "THEHOG_ACCESS_KEY": "YOUR_API_KEY",
+        "THEHOG_SECRET_KEY": "YOUR_API_SECRET"
       }
     }
   }
@@ -70,7 +69,8 @@ Add The Hog:
       "command": "npx",
       "args": ["-y", "@thehog/mcp@latest"],
       "env": {
-        "THEHOG_API_KEY": "YOUR_THEHOG_API_KEY"
+        "THEHOG_ACCESS_KEY": "YOUR_API_KEY",
+        "THEHOG_SECRET_KEY": "YOUR_API_SECRET"
       }
     }
   }
@@ -83,8 +83,9 @@ the absolute path from `which npx`.
 ### Claude Code
 
 ```bash
-claude mcp add --transport stdio --scope user \
-  --env THEHOG_API_KEY=YOUR_THEHOG_API_KEY \
+claude mcp add \
+  -e THEHOG_ACCESS_KEY=YOUR_API_KEY \
+  -e THEHOG_SECRET_KEY=YOUR_API_SECRET \
   thehog -- npx -y @thehog/mcp@latest
 ```
 
@@ -107,7 +108,8 @@ Use either global config at `~/.cursor/mcp.json` or project config at
       "command": "npx",
       "args": ["-y", "@thehog/mcp@latest"],
       "env": {
-        "THEHOG_API_KEY": "${env:THEHOG_API_KEY}"
+        "THEHOG_ACCESS_KEY": "${env:THEHOG_ACCESS_KEY}",
+        "THEHOG_SECRET_KEY": "${env:THEHOG_SECRET_KEY}"
       }
     }
   }
@@ -120,7 +122,8 @@ Restart Cursor, then check Settings -> Tools & MCP.
 
 ```bash
 codex mcp add thehog \
-  --env THEHOG_API_KEY=YOUR_THEHOG_API_KEY \
+  --env THEHOG_ACCESS_KEY=YOUR_API_KEY \
+  --env THEHOG_SECRET_KEY=YOUR_API_SECRET \
   -- npx -y @thehog/mcp@latest
 ```
 
@@ -133,7 +136,8 @@ args = ["-y", "@thehog/mcp@latest"]
 enabled = true
 
 [mcp_servers.thehog.env]
-THEHOG_API_KEY = "YOUR_THEHOG_API_KEY"
+THEHOG_ACCESS_KEY = "YOUR_API_KEY"
+THEHOG_SECRET_KEY = "YOUR_API_SECRET"
 ```
 
 Verify:
@@ -155,7 +159,8 @@ VS Code uses `servers` instead of `mcpServers`. Add this to workspace
       "command": "npx",
       "args": ["-y", "@thehog/mcp@latest"],
       "env": {
-        "THEHOG_API_KEY": "${input:thehog-api-key}"
+        "THEHOG_ACCESS_KEY": "${input:thehog-api-key}",
+        "THEHOG_SECRET_KEY": "${input:thehog-api-secret}"
       }
     }
   },
@@ -164,6 +169,12 @@ VS Code uses `servers` instead of `mcpServers`. Add this to workspace
       "type": "promptString",
       "id": "thehog-api-key",
       "description": "The Hog API key",
+      "password": true
+    },
+    {
+      "type": "promptString",
+      "id": "thehog-api-secret",
+      "description": "The Hog API secret",
       "password": true
     }
   ]
@@ -185,7 +196,8 @@ Add this to `~/.codeium/windsurf/mcp_config.json`:
       "command": "npx",
       "args": ["-y", "@thehog/mcp@latest"],
       "env": {
-        "THEHOG_API_KEY": "${env:THEHOG_API_KEY}"
+        "THEHOG_ACCESS_KEY": "${env:THEHOG_ACCESS_KEY}",
+        "THEHOG_SECRET_KEY": "${env:THEHOG_SECRET_KEY}"
       }
     }
   }
@@ -196,30 +208,20 @@ Refresh MCP servers from Cascade after saving.
 
 ## Authentication
 
-Recommended:
+Recommended for dashboard-created credentials:
 
 ```json
 {
   "env": {
-    "THEHOG_API_KEY": "YOUR_THEHOG_API_KEY"
-  }
-}
-```
-
-Alternative access-key authentication:
-
-```json
-{
-  "env": {
-    "THEHOG_ACCESS_KEY": "YOUR_THEHOG_ACCESS_KEY",
-    "THEHOG_SECRET_KEY": "YOUR_THEHOG_SECRET_KEY"
+    "THEHOG_ACCESS_KEY": "YOUR_API_KEY",
+    "THEHOG_SECRET_KEY": "YOUR_API_SECRET"
   }
 }
 ```
 
 Do not commit config files that contain real credentials. Prefer user-level MCP
-configuration for personal keys, or use your client's environment-variable or
-secret-input support where available.
+configuration for personal credentials, or use your client's environment-variable
+or secret-input support where available.
 
 ## Security
 
