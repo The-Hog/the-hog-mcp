@@ -53,8 +53,13 @@ async function pollPath(
   path: string,
   options: PollOptions,
 ): Promise<PollResult> {
-  const timeoutMs = Math.max(1, options.timeoutSeconds ?? DEFAULT_TIMEOUT_SECONDS) * 1_000;
-  const intervalMs = Math.max(250, options.intervalMs ?? DEFAULT_INTERVAL_MS);
+  const timeoutSeconds = finiteNumberOrDefault(
+    options.timeoutSeconds,
+    DEFAULT_TIMEOUT_SECONDS,
+  );
+  const intervalValueMs = finiteNumberOrDefault(options.intervalMs, DEFAULT_INTERVAL_MS);
+  const timeoutMs = Math.max(1, timeoutSeconds) * 1_000;
+  const intervalMs = Math.max(250, intervalValueMs);
   const deadline = Date.now() + timeoutMs;
   let attempts = 0;
   let latest: unknown = null;
@@ -80,6 +85,10 @@ function readStatus(value: unknown): string | null {
   }
   const status = (value as { status?: unknown }).status;
   return typeof status === 'string' ? status.toLowerCase() : null;
+}
+
+function finiteNumberOrDefault(value: number | undefined, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
 }
 
 function sleep(ms: number): Promise<void> {

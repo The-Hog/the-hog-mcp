@@ -98,6 +98,58 @@ test('start_deep_research schema matches the public request body', () => {
   ]);
 });
 
+test('submit_search requires at least one search criterion before calling the API', async () => {
+  const tool = primitiveTools.find((candidate) => candidate.name === 'submit_search');
+  assert.ok(tool);
+
+  let called = false;
+  await assert.rejects(
+    () =>
+      tool.execute(
+        { type: 'web_search' },
+        {
+          request: async () => {
+            called = true;
+            return { data: null, status: 200, requestId: null };
+          },
+          createIdempotencyKey: () => 'idem',
+        } as never,
+      ),
+    /requires at least one search criterion/,
+  );
+  assert.equal(called, false);
+});
+
+test('submit_search accepts non-query criteria and strips MCP controls', async () => {
+  const tool = primitiveTools.find((candidate) => candidate.name === 'submit_search');
+  assert.ok(tool);
+
+  const requests: Array<{ body?: unknown; idempotencyKey?: string }> = [];
+  await tool.execute(
+    {
+      type: 'tiktok_hashtag',
+      hashtag: 'thehog',
+      waitForResult: false,
+      idempotencyKey: 'idem_search',
+    },
+    {
+      request: async (request: { body?: unknown; idempotencyKey?: string }) => {
+        requests.push(request);
+        return { data: { id: 'search_1', status: 'queued' }, status: 202, requestId: 'req_1' };
+      },
+      createIdempotencyKey: () => 'generated_idem',
+    } as never,
+  );
+
+  assert.deepEqual(requests[0], {
+    method: 'POST',
+    path: '/api/v1/search',
+    query: undefined,
+    body: { type: 'tiktok_hashtag', hashtag: 'thehog' },
+    idempotencyKey: 'idem_search',
+  });
+});
+
 test('enrichment polling uses the enrichment ID from queued responses', async () => {
   const tool = primitiveTools.find((candidate) => candidate.name === 'enrich_contacts');
   assert.ok(tool);

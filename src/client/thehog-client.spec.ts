@@ -40,6 +40,36 @@ test('request sends bearer auth, idempotency, and JSON body', async () => {
   assert.equal(seen[0].init.body, '{"query":"acme"}');
 });
 
+test('request skips empty scalar and array query values', async () => {
+  const seen: string[] = [];
+  const fetchImpl: FetchLike = async (url) => {
+    seen.push(String(url));
+    return new Response(JSON.stringify({ ok: true }), { status: 200 });
+  };
+  const client = new TheHogClient(
+    {
+      apiBaseUrl: 'https://developer.thehog.ai',
+      apiKey: ['hog', 'live', 'test-key'].join('_'),
+    },
+    fetchImpl,
+  );
+
+  await client.request({
+    method: 'GET',
+    path: '/api/v1/search',
+    query: {
+      type: '',
+      include_domains: ['example.com', undefined, null, ''],
+      limit: 10,
+    },
+  });
+
+  assert.equal(
+    seen[0],
+    'https://developer.thehog.ai/api/v1/search?include_domains=example.com&limit=10',
+  );
+});
+
 test('request sends access and secret key auth', async () => {
   const accessKey = ['ak', 'test-key'].join('_');
   const secretKey = ['sk', 'test-key'].join('_');

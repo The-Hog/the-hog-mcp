@@ -2,7 +2,7 @@ import { z } from 'zod/v4';
 import { idempotencyField, paginationFields, waitFields } from '../schemas.js';
 import { operationIdField } from './common.js';
 import { endpointTool, omitControlFields, pick } from './endpoint-tool.js';
-import type { PrimitiveToolDefinition } from './types.js';
+import type { PrimitiveToolDefinition, ToolInput } from './types.js';
 
 export const searchPrimitiveTools: PrimitiveToolDefinition[] = [
   endpointTool({
@@ -37,7 +37,7 @@ export const searchPrimitiveTools: PrimitiveToolDefinition[] = [
       ...waitFields,
       ...idempotencyField,
     },
-    body: omitControlFields,
+    body: searchRequestBody,
     idempotent: true,
     poll: 'search',
   }),
@@ -62,3 +62,33 @@ export const searchPrimitiveTools: PrimitiveToolDefinition[] = [
     query: (input) => pick(input, ['cursor', 'limit', 'type']),
   }),
 ];
+
+function searchRequestBody(input: ToolInput): Record<string, unknown> {
+  if (!hasSearchCriteria(input)) {
+    throw new Error(
+      'submit_search requires at least one search criterion: query, match_any, match_all, site, include_domains, hashtag, or subreddit.',
+    );
+  }
+  return omitControlFields(input);
+}
+
+function hasSearchCriteria(input: ToolInput): boolean {
+  return [
+    input.query,
+    input.site,
+    input.hashtag,
+    input.subreddit,
+    input.match_any,
+    input.match_all,
+    input.include_domains,
+  ].some(hasNonEmptyValue);
+}
+
+function hasNonEmptyValue(value: unknown): boolean {
+  if (typeof value === 'string') {
+    return value.trim().length > 0;
+  }
+  return Array.isArray(value)
+    ? value.some((item) => typeof item === 'string' && item.trim().length > 0)
+    : false;
+}

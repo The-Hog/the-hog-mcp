@@ -46,3 +46,28 @@ test('pollOperation returns timedOut after non-terminal responses', async () => 
   assert.equal(result.attempts > 0, true);
   assert.deepEqual(result.final, { id: 'op_1', status: 'running' });
 });
+
+test('pollOperation falls back to safe timing defaults for non-finite options', async () => {
+  const requests: Array<{ timeoutMs?: number }> = [];
+  const result = await pollOperation(
+    {
+      request: async (request: { timeoutMs?: number }) => {
+        requests.push(request);
+        return {
+          data: { id: 'op_1', status: 'completed' },
+          status: 200,
+          requestId: 'req_1',
+        };
+      },
+    } as never,
+    'op_1',
+    { timeoutSeconds: Number.POSITIVE_INFINITY, intervalMs: Number.NaN },
+  );
+
+  assert.equal(result.timedOut, false);
+  assert.equal(result.attempts, 1);
+  assert.equal(
+    typeof requests[0]?.timeoutMs === 'number' && Number.isFinite(requests[0].timeoutMs),
+    true,
+  );
+});

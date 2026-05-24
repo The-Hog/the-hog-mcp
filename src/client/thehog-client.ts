@@ -86,11 +86,14 @@ export class TheHogClient {
   private buildUrl(path: string, query: Record<string, unknown> = {}): string {
     const url = new URL(path, `${this.config.apiBaseUrl}/`);
     for (const [key, value] of Object.entries(query)) {
-      if (value === undefined || value === null || value === '') {
+      if (!shouldIncludeQueryValue(value)) {
         continue;
       }
       if (Array.isArray(value)) {
         for (const item of value) {
+          if (!shouldIncludeQueryValue(item)) {
+            continue;
+          }
           url.searchParams.append(key, String(item));
         }
         continue;
@@ -122,6 +125,10 @@ export class TheHogClient {
     }
     return headers;
   }
+}
+
+function shouldIncludeQueryValue(value: unknown): boolean {
+  return value !== undefined && value !== null && value !== '';
 }
 
 export function stripUndefined(value: unknown): unknown {
