@@ -2,13 +2,6 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { loadConfig } from './config.js';
 
-test('loadConfig accepts bearer API key auth', () => {
-  const apiKey = ['hog', 'live', 'example'].join('_');
-  const config = loadConfig({ THEHOG_API_KEY: apiKey });
-  assert.equal(config.apiBaseUrl, 'https://developer.thehog.ai');
-  assert.equal(config.apiKey, apiKey);
-});
-
 test('loadConfig accepts access and secret key auth', () => {
   const accessKey = ['ak', 'example'].join('_');
   const secretKey = ['sk', 'example'].join('_');
@@ -24,7 +17,8 @@ test('loadConfig accepts access and secret key auth', () => {
 
 test('loadConfig accepts request timeout override', () => {
   const config = loadConfig({
-    THEHOG_API_KEY: ['hog', 'live', 'example'].join('_'),
+    THEHOG_ACCESS_KEY: ['ak', 'example'].join('_'),
+    THEHOG_SECRET_KEY: ['sk', 'example'].join('_'),
     THEHOG_REQUEST_TIMEOUT_MS: '1234',
   });
   assert.equal(config.requestTimeoutMs, 1234);
@@ -45,7 +39,8 @@ test('loadConfig rejects non-HTTPS non-local base URLs', () => {
   assert.throws(
     () =>
       loadConfig({
-        THEHOG_API_KEY: ['hog', 'live', 'example'].join('_'),
+        THEHOG_ACCESS_KEY: ['ak', 'example'].join('_'),
+        THEHOG_SECRET_KEY: ['sk', 'example'].join('_'),
         THEHOG_API_BASE_URL: 'http://example.com',
       }),
     /must be HTTPS/,
@@ -54,7 +49,8 @@ test('loadConfig rejects non-HTTPS non-local base URLs', () => {
 
 test('loadConfig accepts IPv6 localhost over HTTP', () => {
   const config = loadConfig({
-    THEHOG_API_KEY: ['hog', 'live', 'example'].join('_'),
+    THEHOG_ACCESS_KEY: ['ak', 'example'].join('_'),
+    THEHOG_SECRET_KEY: ['sk', 'example'].join('_'),
     THEHOG_API_BASE_URL: 'http://[::1]:3000/',
   });
   assert.equal(config.apiBaseUrl, 'http://[::1]:3000');
@@ -64,7 +60,8 @@ test('loadConfig rejects invalid request timeout override', () => {
   assert.throws(
     () =>
       loadConfig({
-        THEHOG_API_KEY: ['hog', 'live', 'example'].join('_'),
+        THEHOG_ACCESS_KEY: ['ak', 'example'].join('_'),
+        THEHOG_SECRET_KEY: ['sk', 'example'].join('_'),
         THEHOG_REQUEST_TIMEOUT_MS: '0',
       }),
     /positive integer/,

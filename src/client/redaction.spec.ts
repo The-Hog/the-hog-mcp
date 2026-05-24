@@ -3,11 +3,11 @@ import test from 'node:test';
 import { redactSecrets } from './redaction.js';
 
 test('redactSecrets removes API-like credentials recursively', () => {
-  const apiKey = ['hog', 'live', 'abc123'].join('_');
+  const publicKey = ['hog', 'live', 'abc123'].join('_');
   const accessKey = ['ak', 'abc123'].join('_');
   const secretKey = ['sk', 'abc123'].join('_');
   const value = redactSecrets({
-    authorization: `Bearer ${apiKey}`,
+    publicKey,
     nested: {
       accessKey,
       message: `failed with ${secretKey}`,
@@ -15,7 +15,7 @@ test('redactSecrets removes API-like credentials recursively', () => {
   });
 
   const text = JSON.stringify(value);
-  assert.equal(text.includes(apiKey), false);
+  assert.equal(text.includes(publicKey), false);
   assert.equal(text.includes(accessKey), false);
   assert.equal(text.includes(secretKey), false);
   assert.match(text, /REDACTED/);

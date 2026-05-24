@@ -123,15 +123,8 @@ export class TheHogClient {
       headers.set('Idempotency-Key', request.idempotencyKey);
     }
 
-    if (this.config.accessKey && this.config.secretKey) {
-      headers.set('X-Access-Key', this.config.accessKey);
-      headers.set('X-Secret-Key', this.config.secretKey);
-      return headers;
-    }
-
-    if (this.config.apiKey) {
-      headers.set('Authorization', `Bearer ${this.config.apiKey}`);
-    }
+    headers.set('X-Access-Key', this.config.accessKey);
+    headers.set('X-Secret-Key', this.config.secretKey);
     return headers;
   }
 }

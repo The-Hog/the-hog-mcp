@@ -1,8 +1,7 @@
 export interface TheHogMcpConfig {
   apiBaseUrl: string;
-  apiKey?: string;
-  accessKey?: string;
-  secretKey?: string;
+  accessKey: string;
+  secretKey: string;
   requestTimeoutMs?: number;
 }
 
@@ -12,7 +11,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): TheHogMcpConfi
   const apiBaseUrl = normalizeBaseUrl(
     env.THEHOG_API_BASE_URL ?? DEFAULT_API_BASE_URL,
   );
-  const apiKey = nonEmpty(env.THEHOG_API_KEY);
   const accessKey = nonEmpty(env.THEHOG_ACCESS_KEY);
   const secretKey = nonEmpty(env.THEHOG_SECRET_KEY);
   const requestTimeoutMs = optionalPositiveInteger(env.THEHOG_REQUEST_TIMEOUT_MS);
@@ -23,17 +21,16 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): TheHogMcpConfi
     );
   }
 
-  if (!apiKey && !(accessKey && secretKey)) {
+  if (!(accessKey && secretKey)) {
     throw new Error(
-      'Missing The Hog API credentials. Set THEHOG_API_KEY or both THEHOG_ACCESS_KEY and THEHOG_SECRET_KEY.',
+      'Missing The Hog API credentials. Set both THEHOG_ACCESS_KEY and THEHOG_SECRET_KEY.',
     );
   }
 
   return {
     apiBaseUrl,
-    ...(apiKey ? { apiKey } : {}),
-    ...(accessKey ? { accessKey } : {}),
-    ...(secretKey ? { secretKey } : {}),
+    accessKey,
+    secretKey,
     ...(requestTimeoutMs ? { requestTimeoutMs } : {}),
   };
 }

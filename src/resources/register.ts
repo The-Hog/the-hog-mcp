@@ -16,7 +16,7 @@ export function registerResources(server: McpServer): void {
         {
           uri: uri.href,
           text:
-            'Set THEHOG_API_KEY, or set both THEHOG_ACCESS_KEY and THEHOG_SECRET_KEY. The MCP server runs locally over stdio and calls https://developer.thehog.ai.',
+            'Set both THEHOG_ACCESS_KEY and THEHOG_SECRET_KEY. The MCP server runs locally over stdio and calls https://developer.thehog.ai.',
         },
       ],
     }),
