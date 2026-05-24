@@ -57,4 +57,12 @@ test('package metadata is safe to publish publicly', () => {
     packageJson.scripts?.prepublishOnly,
     'npm test && npm run test:openapi && npm run pack:dry-run',
   );
+  assert.equal(
+    packageJson.scripts?.test,
+    "tsc -p tsconfig.spec.json && find dist-test -name '*.spec.js' -print0 | xargs -0 node --test",
+  );
+  assert.equal(
+    packageJson.scripts?.['pack:dry-run'],
+    'npm run build && npm pack --dry-run --ignore-scripts',
+  );
 });
