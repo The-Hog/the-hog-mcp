@@ -1,0 +1,155 @@
+name: Publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      auth_mode:
+        description: 'Use npm_token_bootstrap only for the first publish; use trusted_publishing after npm trust is configured'
+        required: true
+        default: trusted_publishing
+        type: choice
+        options:
+          - trusted_publishing
+          - npm_token_bootstrap
+      expected_version:
+        description: 'Optional package version that must match package.json'
+        required: false
+        type: string
+
+concurrency:
+  group: thehog-mcp-publish-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Verify package on minimum runtime
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      THEHOG_OPENAPI_SPEC_PATH: /tmp/thehog-openapi.json
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: https://registry.npmjs.org
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Download public OpenAPI
+        run: curl --fail --silent --show-error --location https://docs.thehog.ai/api-reference/openapi.json --output "$THEHOG_OPENAPI_SPEC_PATH"
+
+      - name: Check package
+        run: npm run release:check
+
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Capture package version
+        id: package
+        run: |
+          set -euo pipefail
+          VERSION="$(node -p "require('./package.json').version")"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Package version: ${VERSION}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Validate requested version
+        if: inputs.expected_version != ''
+        env:
+          EXPECTED_VERSION: ${{ inputs.expected_version }}
+          PACKAGE_VERSION: ${{ steps.package.outputs.version }}
+        run: |
+          set -euo pipefail
+          if [ "$EXPECTED_VERSION" != "$PACKAGE_VERSION" ]; then
+            echo "Expected version ${EXPECTED_VERSION}, but package.json has ${PACKAGE_VERSION}." >&2
+            exit 1
+          fi
+
+  publish:
+    name: Publish to npm
+    if: github.ref == 'refs/heads/main'
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: npm-publish
+    env:
+      THEHOG_OPENAPI_SPEC_PATH: /tmp/thehog-openapi.json
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          registry-url: https://registry.npmjs.org
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Download public OpenAPI
+        run: curl --fail --silent --show-error --location https://docs.thehog.ai/api-reference/openapi.json --output "$THEHOG_OPENAPI_SPEC_PATH"
+
+      - name: Verify npm supports trusted publishing and provenance
+        run: |
+          set -euo pipefail
+          NPM_VERSION="$(npm --version)"
+          echo "npm ${NPM_VERSION}"
+          node -e "const [major, minor, patch] = process.argv[1].split('.').map(Number); if (major < 11 || (major === 11 && minor < 5) || (major === 11 && minor === 5 && patch < 1)) { console.error('npm 11.5.1 or newer is required for trusted publishing and provenance.'); process.exit(1); }" "$NPM_VERSION"
+
+      - name: Verify package version is unpublished
+        id: package
+        run: |
+          set -euo pipefail
+          VERSION="$(node -p "require('./package.json').version")"
+          if ! npm view "@thehog/mcp" name >/dev/null 2>&1; then
+            echo "package_exists=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "package_exists=true" >> "$GITHUB_OUTPUT"
+          fi
+          if npm view "@thehog/mcp@${VERSION}" version >/dev/null 2>&1; then
+            echo "@thehog/mcp@${VERSION} is already published. Bump package.json before releasing." >&2
+            exit 1
+          fi
+          echo "Publishing @thehog/mcp@${VERSION}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish package with trusted publishing
+        if: steps.package.outputs.package_exists == 'true' && inputs.auth_mode == 'trusted_publishing'
+        run: |
+          set -euo pipefail
+          npm publish --access public --provenance
+
+      - name: Publish package with bootstrap token
+        if: steps.package.outputs.package_exists == 'false' || inputs.auth_mode == 'npm_token_bootstrap'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${NODE_AUTH_TOKEN:-}" ]; then
+            echo "NPM_TOKEN is required for npm_token_bootstrap mode." >&2
+            exit 1
+          fi
+          npm publish --access public --provenance
+
+      - name: Verify published package
+        run: |
+          set -euo pipefail
+          VERSION="$(node -p "require('./package.json').version")"
+          PUBLISHED="$(npm view "@thehog/mcp@${VERSION}" version)"
+          if [ "$PUBLISHED" != "$VERSION" ]; then
+            echo "Expected npm to return ${VERSION}, got ${PUBLISHED}." >&2
+            exit 1
+          fi
+          echo "Published @thehog/mcp@${VERSION}" >> "$GITHUB_STEP_SUMMARY"

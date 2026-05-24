@@ -1,0 +1,57 @@
+{
+  "name": "@thehog/mcp",
+  "version": "0.2.0",
+  "description": "MCP server for The Hog API",
+  "homepage": "https://docs.thehog.ai/guides/use-mcp",
+  "bugs": {
+    "url": "https://github.com/The-Hog/the-hog-mcp/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/The-Hog/the-hog-mcp.git"
+  },
+  "keywords": [
+    "thehog",
+    "mcp",
+    "model-context-protocol",
+    "sales-intelligence",
+    "prospecting"
+  ],
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "thehog-mcp": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md",
+    "package.json"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "tsc -p tsconfig.spec.json && node --test \"dist-test/**/*.spec.js\"",
+    "test:openapi": "tsc -p tsconfig.spec.json && THEHOG_RUN_OPENAPI_DRIFT=1 node --test \"dist-test/tools/primitives/openapi-drift.spec.js\"",
+    "release:check": "npm test && npm run test:openapi && npm run pack:dry-run",
+    "prepack": "npm test && npm run build",
+    "prepublishOnly": "npm test && npm run test:openapi && npm run pack:dry-run",
+    "pack:dry-run": "npm run build && npm pack --dry-run"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.7",
+    "typescript": "^5.7.3"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT",
+  "private": false
+}
