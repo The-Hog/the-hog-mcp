@@ -3,8 +3,9 @@ import test from 'node:test';
 import { TheHogClient, type FetchLike } from './thehog-client.js';
 import { TheHogApiError } from './errors.js';
 
-test('request sends bearer auth, idempotency, and JSON body', async () => {
-  const apiKey = ['hog', 'live', 'test-key'].join('_');
+test('request sends access and secret key auth, idempotency, and JSON body', async () => {
+  const accessKey = ['ak', 'test-key'].join('_');
+  const secretKey = ['sk', 'test-key'].join('_');
   const seen: Array<{ url: string; init: RequestInit }> = [];
   const fetchImpl: FetchLike = async (url, init) => {
     seen.push({ url: String(url), init: init ?? {} });
@@ -14,7 +15,7 @@ test('request sends bearer auth, idempotency, and JSON body', async () => {
     });
   };
   const client = new TheHogClient(
-    { apiBaseUrl: 'https://developer.thehog.ai', apiKey },
+    { apiBaseUrl: 'https://developer.thehog.ai', accessKey, secretKey },
     fetchImpl,
   );
 
@@ -30,12 +31,14 @@ test('request sends bearer auth, idempotency, and JSON body', async () => {
   const headers = seen[0].init.headers as Headers;
   assert.deepEqual([...headers.keys()].sort(), [
     'accept',
-    'authorization',
     'content-type',
     'idempotency-key',
     'user-agent',
+    'x-access-key',
+    'x-secret-key',
   ]);
-  assert.equal(headers.get('authorization'), `Bearer ${apiKey}`);
+  assert.equal(headers.get('x-access-key'), accessKey);
+  assert.equal(headers.get('x-secret-key'), secretKey);
   assert.equal(headers.get('idempotency-key'), 'idem_1');
   assert.equal(seen[0].init.redirect, 'manual');
   assert.equal(seen[0].init.body, '{"query":"acme"}');
@@ -93,7 +96,8 @@ test('request skips empty scalar and array query values', async () => {
   const client = new TheHogClient(
     {
       apiBaseUrl: 'https://developer.thehog.ai',
-      apiKey: ['hog', 'live', 'test-key'].join('_'),
+      accessKey: ['ak', 'test-key'].join('_'),
+      secretKey: ['sk', 'test-key'].join('_'),
     },
     fetchImpl,
   );
@@ -140,7 +144,8 @@ test('request sends access and secret key auth', async () => {
 });
 
 test('request throws sanitized API error', async () => {
-  const apiKey = ['hog', 'live', 'test-key'].join('_');
+  const accessKey = ['ak', 'test-key'].join('_');
+  const secretKey = ['sk', 'test-key'].join('_');
   const leakedKey = ['hog', 'live', 'should-redact'].join('_');
   const fetchImpl: FetchLike = async () =>
     new Response(
@@ -151,7 +156,7 @@ test('request throws sanitized API error', async () => {
       { status: 401, headers: { 'x-request-id': 'req_bad' } },
     );
   const client = new TheHogClient(
-    { apiBaseUrl: 'https://developer.thehog.ai', apiKey },
+    { apiBaseUrl: 'https://developer.thehog.ai', accessKey, secretKey },
     fetchImpl,
   );
 
@@ -176,7 +181,8 @@ test('request redacts non-Error thrown values', async () => {
   const client = new TheHogClient(
     {
       apiBaseUrl: 'https://developer.thehog.ai',
-      apiKey: ['hog', 'live', 'test-key'].join('_'),
+      accessKey: ['ak', 'test-key'].join('_'),
+      secretKey: ['sk', 'test-key'].join('_'),
     },
     fetchImpl,
   );
@@ -210,7 +216,8 @@ test('request timeout covers response body reads', async () => {
   const client = new TheHogClient(
     {
       apiBaseUrl: 'https://developer.thehog.ai',
-      apiKey: ['hog', 'live', 'test-key'].join('_'),
+      accessKey: ['ak', 'test-key'].join('_'),
+      secretKey: ['sk', 'test-key'].join('_'),
       requestTimeoutMs: 5,
     },
     fetchImpl,
@@ -233,7 +240,8 @@ test('request aborts when the timeout is reached', async () => {
   const client = new TheHogClient(
     {
       apiBaseUrl: 'https://developer.thehog.ai',
-      apiKey: ['hog', 'live', 'test-key'].join('_'),
+      accessKey: ['ak', 'test-key'].join('_'),
+      secretKey: ['sk', 'test-key'].join('_'),
       requestTimeoutMs: 5,
     },
     fetchImpl,

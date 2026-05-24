@@ -2,7 +2,6 @@ const SECRET_PATTERNS = [
   /hog_(?:live|test)_[A-Za-z0-9_-]+/g,
   /ak_[A-Za-z0-9_-]+/g,
   /sk_[A-Za-z0-9_-]+/g,
-  /Bearer\s+[A-Za-z0-9._~+/-]+=*/gi,
 ];
 
 export function redactSecrets(value: unknown): unknown {

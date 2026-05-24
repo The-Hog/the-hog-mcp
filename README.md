@@ -83,10 +83,10 @@ the absolute path from `which npx`.
 ### Claude Code
 
 ```bash
-claude mcp add \
+claude mcp add thehog \
   -e THEHOG_ACCESS_KEY=YOUR_API_KEY \
   -e THEHOG_SECRET_KEY=YOUR_API_SECRET \
-  thehog -- npx -y @thehog/mcp@latest
+  -- npx -y @thehog/mcp@latest
 ```
 
 Verify:
