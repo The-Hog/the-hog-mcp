@@ -30,6 +30,13 @@ test('publish workflow uses trusted publishing without npm token auth', async ()
     false,
     'workflow must not reference npm token secrets',
   );
+  assert.ok(
+    publishJob.includes('for attempt in 1 2 3 4 5 6; do') &&
+      publishJob.includes('if [ "$attempt" -lt 6 ]; then') &&
+      publishJob.includes('sleep 10') &&
+      publishJob.includes('PUBLISHED="$(npm view "@thehog/mcp@${VERSION}" version 2>/dev/null || true)"'),
+    'publish job must retry final npm registry verification without sleeping after the final attempt',
+  );
 });
 
 function workflowJobBlock(workflow: string, jobName: string): string {
