@@ -1,6 +1,6 @@
 {
   "name": "@thehog/mcp",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "MCP server for The Hog API",
   "homepage": "https://docs.thehog.ai/guides/use-mcp",
   "bugs": {
@@ -19,8 +19,15 @@
   ],
   "type": "module",
   "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
   "bin": {
-    "thehog-mcp": "dist/index.js"
+    "thehog-mcp": "dist/cli.js"
   },
   "files": [
     "dist",
@@ -30,7 +37,7 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "test": "tsc -p tsconfig.spec.json && node scripts/run-tests.mjs",
+    "test": "npm run build && tsc -p tsconfig.spec.json && node scripts/run-tests.mjs",
     "test:openapi": "tsc -p tsconfig.spec.json && THEHOG_RUN_OPENAPI_DRIFT=1 node --test \"dist-test/tools/primitives/openapi-drift.spec.js\"",
     "release:check": "npm test && npm run test:openapi && npm run pack:dry-run",
     "prepack": "npm test && npm run build",

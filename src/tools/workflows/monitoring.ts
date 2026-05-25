@@ -1,5 +1,5 @@
 import { z } from 'zod/v4';
-import type { TheHogClient } from '../../client/thehog-client.js';
+import type { TheHogToolClient } from '../../client/thehog-client.js';
 import {
   idempotencyField,
   monitorTypeSchema,
@@ -41,7 +41,7 @@ export const monitoringWorkflowTools: WorkflowToolDefinition[] = [
   },
 ];
 
-async function monitorTopic(input: ToolInput, client: TheHogClient) {
+async function monitorTopic(input: ToolInput, client: TheHogToolClient) {
   const ctx = createWorkflowContext('monitor_topic');
   const sources = readSources(input.sources);
   validateMonitorWorkflowInput(sources, input);

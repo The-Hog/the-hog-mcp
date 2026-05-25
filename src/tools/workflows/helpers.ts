@@ -4,9 +4,9 @@ import {
   pollOperation,
 } from '../../client/polling.js';
 import type {
-  TheHogClient,
   HttpMethod,
   TheHogRequest,
+  TheHogToolClient,
 } from '../../client/thehog-client.js';
 import { readAsyncId } from '../primitives/endpoint-tool.js';
 import type { ToolInput } from '../types.js';
@@ -41,7 +41,7 @@ export function workflowStatus(ctx: WorkflowContext, completedSteps: number): st
 }
 
 export async function requestWorkflowStep(
-  client: TheHogClient,
+  client: TheHogToolClient,
   ctx: WorkflowContext,
   options: WorkflowRequestOptions,
 ): Promise<WorkflowStepResult> {
@@ -91,7 +91,7 @@ export async function requestWorkflowStep(
 }
 
 export async function runWorkflowStep(
-  client: TheHogClient,
+  client: TheHogToolClient,
   ctx: WorkflowContext,
   options: WorkflowRequestOptions,
 ): Promise<WorkflowStepResult | null> {
@@ -125,7 +125,7 @@ export function timeoutSeconds(input: ToolInput): number | undefined {
 }
 
 export function workflowIdempotencyKey(
-  client: TheHogClient,
+  client: TheHogToolClient,
   input: ToolInput,
   workflowName: string,
   step: string,

@@ -26,27 +26,10 @@ paths under `/api/...`.
 
 ## Client Setup
 
-Most MCP clients can run this server as a local stdio process:
-
-```json
-{
-  "mcpServers": {
-    "thehog": {
-      "type": "stdio",
-      "command": "npx",
-      "args": ["-y", "@thehog/mcp@latest"],
-      "env": {
-        "THEHOG_ACCESS_KEY": "YOUR_API_KEY",
-        "THEHOG_SECRET_KEY": "YOUR_API_SECRET"
-      }
-    }
-  }
-}
-```
-
-If your client supports environment-variable interpolation, prefer referencing an
-existing environment variable instead of writing the key directly into a config
-file.
+Most MCP clients can run this server as a local stdio process with `npx` and the
+two The Hog credential environment variables. If your client supports
+environment-variable interpolation, prefer referencing existing environment
+variables instead of writing keys directly into a config file.
 
 ### Claude Desktop
 
@@ -208,20 +191,36 @@ Refresh MCP servers from Cascade after saving.
 
 ## Authentication
 
-Recommended for dashboard-created credentials:
+Dashboard-created credentials require both `THEHOG_ACCESS_KEY` and
+`THEHOG_SECRET_KEY`. Do not commit config files that contain real credentials.
+Prefer user-level MCP configuration for personal credentials, or use your
+client's environment-variable or secret-input support where available.
 
-```json
-{
-  "env": {
-    "THEHOG_ACCESS_KEY": "YOUR_API_KEY",
-    "THEHOG_SECRET_KEY": "YOUR_API_SECRET"
-  }
-}
+## Library API
+
+The package also exports its public tool definitions and registration helpers for
+advanced integrations that need to provide their own client resolution:
+
+```ts
+import {
+  primitiveTools,
+  registerToolDefinitions,
+  workflowTools,
+  type TheHogToolClient,
+} from '@thehog/mcp';
+
+registerToolDefinitions(server, [...primitiveTools, ...workflowTools], {
+  getClient: async (context): Promise<TheHogToolClient> => {
+    return clientForCurrentRequest(context);
+  },
+});
 ```
 
-Do not commit config files that contain real credentials. Prefer user-level MCP
-configuration for personal credentials, or use your client's environment-variable
-or secret-input support where available.
+`TheHogToolClient` is the minimal interface used by tools: `request()` plus
+`createIdempotencyKey()`. Hosted or embedded integrations should resolve it per
+tool call with `getClient(context)` so credentials stay scoped to the active MCP
+request. Local single-user stdio integrations can return the same client each
+time.
 
 ## Security
 
