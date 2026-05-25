@@ -1,17 +1,18 @@
 import assert from 'node:assert/strict';
-import { readdir, readFile } from 'node:fs/promises';
+import { readdir, readFile, stat } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 import test from 'node:test';
 
 const ROOT = new URL('..', import.meta.url).pathname;
 
-const PUBLIC_FILES = [
+const PUBLIC_REPO_ENTRIES = [
   'package.json',
   'README.md',
   'SECURITY.md',
   'src',
-  'dist-test',
 ];
+
+const PUBLISHED_ARTIFACT_ENTRIES = ['package.json', 'README.md', 'dist'];
 
 const PRIVATE_BOUNDARY_PATTERNS = [
   /\bprojectId\b/i,
@@ -29,6 +30,10 @@ const PRIVATE_BOUNDARY_PATTERNS = [
 
 test('public package boundary does not include private remote MCP implementation details', async () => {
   const files = await publicTextFiles();
+  assert.ok(
+    files.some((file) => relative(ROOT, file).startsWith('dist/')),
+    'expected public package boundary scan to include built dist artifacts',
+  );
   const violations: string[] = [];
 
   for (const file of files) {
@@ -68,22 +73,39 @@ test('package executable is separated from importable library entrypoint', async
 
 async function publicTextFiles(): Promise<string[]> {
   const files: string[] = [];
-  for (const entry of PUBLIC_FILES) {
+  for (const entry of PUBLIC_REPO_ENTRIES) {
     await collectTextFiles(join(ROOT, entry), files);
   }
-  return files.sort();
+  for (const entry of PUBLISHED_ARTIFACT_ENTRIES) {
+    await collectTextFiles(join(ROOT, entry), files);
+  }
+  return [...new Set(files)].sort();
 }
 
 async function collectTextFiles(path: string, output: string[]): Promise<void> {
-  const entries = await readdir(path, { withFileTypes: true }).catch(
-    async (error: NodeJS.ErrnoException) => {
-      if (error.code === 'ENOENT') {
-        return [];
-      }
+  const info = await stat(path);
+  if (info.isFile()) {
+    const relativePath = relative(ROOT, path);
+    if (/\.(spec|test)\./.test(relativePath)) {
+      return;
+    }
+    if (/\.(json|md|ts|tsx|js|mjs|yml|yaml)$/.test(relativePath)) {
       output.push(path);
-      return [];
-    },
+    }
+    return;
+  }
+
+  if (!info.isDirectory()) {
+    return;
+  }
+
+  const entries = await readdir(path, { withFileTypes: true });
+  assert.notEqual(
+    entries.length,
+    0,
+    `expected ${relative(ROOT, path)} to contain package boundary files`,
   );
+
   for (const entry of entries) {
     const child = join(path, entry.name);
     if (entry.isDirectory()) {
