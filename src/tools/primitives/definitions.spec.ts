@@ -113,6 +113,66 @@ test('async primitive tools do not repoll terminal initial responses', async () 
   });
 });
 
+test('async primitive tools do not repoll nested terminal initial responses', async () => {
+  const tool = primitiveTools.find((candidate) => candidate.name === 'submit_search');
+  assert.ok(tool);
+
+  const requests: Array<{ method: string; path: string }> = [];
+  const result = await tool.execute(
+    { type: 'web_search', query: 'the hog api', waitForResult: true },
+    {
+      request: async (request: { method: string; path: string }) => {
+        requests.push(request);
+        return {
+          data: { id: 'search_1', data: { status: 'completed', results: [] } },
+          status: 200,
+          requestId: 'req_search',
+        };
+      },
+      createIdempotencyKey: () => 'generated_submit_search',
+    } as never,
+  );
+
+  assert.deepEqual(
+    requests.map((request) => ({ method: request.method, path: request.path })),
+    [{ method: 'POST', path: '/api/v1/search' }],
+  );
+  assert.deepEqual(result, {
+    response: { id: 'search_1', data: { status: 'completed', results: [] } },
+    requestId: 'req_search',
+  });
+});
+
+test('configured async primitive tools return direct responses when no async ID exists', async () => {
+  const tool = primitiveTools.find((candidate) => candidate.name === 'search_people');
+  assert.ok(tool);
+
+  const requests: Array<{ method: string; path: string }> = [];
+  const result = await tool.execute(
+    { query: 'security engineers', waitForResult: true },
+    {
+      request: async (request: { method: string; path: string }) => {
+        requests.push(request);
+        return {
+          data: { status: 'queued' },
+          status: 202,
+          requestId: 'req_people',
+        };
+      },
+      createIdempotencyKey: () => 'generated_search_people',
+    } as never,
+  );
+
+  assert.deepEqual(
+    requests.map((request) => ({ method: request.method, path: request.path })),
+    [{ method: 'POST', path: '/api/v1/people/search' }],
+  );
+  assert.deepEqual(result, {
+    response: { status: 'queued' },
+    requestId: 'req_people',
+  });
+});
+
 test('mutating primitive tools expose idempotency and risk annotations', async () => {
   const sampleInputs: Record<string, Record<string, unknown>> = {
     search_companies: { query: 'security companies' },
@@ -532,6 +592,86 @@ test('primitive tools infer operation polling from queued operationId responses'
     timedOut: false,
     pollAttempts: 1,
     requestId: 'req_custom',
+  });
+});
+
+test('primitive tools infer operation polling from nested queued operation responses', async () => {
+  const tool = endpointTool({
+    name: 'async_unconfigured_nested_tool',
+    description: 'Test tool',
+    method: 'POST',
+    path: '/api/custom-nested-async',
+    endpointPath: '/api/custom-nested-async',
+    inputSchema: {},
+    idempotent: true,
+  });
+
+  const requests: Array<{ method: string; path: string }> = [];
+  await tool.execute(
+    {},
+    {
+      request: async (request: { method: string; path: string }) => {
+        requests.push(request);
+        if (request.method === 'POST') {
+          return {
+            data: { data: { operationId: 'op_nested', status: 'queued' } },
+            status: 200,
+            requestId: 'req_nested',
+          };
+        }
+        return {
+          data: { id: 'op_nested', status: 'completed' },
+          status: 200,
+          requestId: 'req_nested_poll',
+        };
+      },
+      createIdempotencyKey: () => 'generated_custom',
+    } as never,
+  );
+
+  assert.deepEqual(
+    requests.map((request) => ({ method: request.method, path: request.path })),
+    [
+      { method: 'POST', path: '/api/custom-nested-async' },
+      { method: 'GET', path: '/api/operations/op_nested' },
+    ],
+  );
+});
+
+test('primitive tools do not infer operation polling from terminal unconfigured responses', async () => {
+  const tool = endpointTool({
+    name: 'terminal_unconfigured_tool',
+    description: 'Test tool',
+    method: 'POST',
+    path: '/api/custom-terminal',
+    endpointPath: '/api/custom-terminal',
+    inputSchema: {},
+    idempotent: true,
+  });
+
+  const requests: Array<{ method: string; path: string }> = [];
+  const result = await tool.execute(
+    {},
+    {
+      request: async (request: { method: string; path: string }) => {
+        requests.push(request);
+        return {
+          data: { operationId: 'op_terminal', status: 'succeeded', result: { ok: true } },
+          status: 200,
+          requestId: 'req_terminal',
+        };
+      },
+      createIdempotencyKey: () => 'generated_custom',
+    } as never,
+  );
+
+  assert.deepEqual(
+    requests.map((request) => ({ method: request.method, path: request.path })),
+    [{ method: 'POST', path: '/api/custom-terminal' }],
+  );
+  assert.deepEqual(result, {
+    response: { operationId: 'op_terminal', status: 'succeeded', result: { ok: true } },
+    requestId: 'req_terminal',
   });
 });
 
