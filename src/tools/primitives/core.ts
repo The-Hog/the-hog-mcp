@@ -8,13 +8,14 @@ import {
 } from '../schemas.js';
 import { operationIdField, searchBodyShape } from './common.js';
 import { endpointTool, omitControlFields } from './endpoint-tool.js';
+import { withEmptySearchGuidance } from './search-guidance.js';
 import type { PrimitiveToolDefinition } from './types.js';
 
 export const corePrimitiveTools: PrimitiveToolDefinition[] = [
   endpointTool({
     name: 'search_companies',
     description:
-      'Search companies using The Hog company search API. Use this when the user wants to find accounts matching a natural-language ICP, company name, market, or filter set. This may consume The Hog credits. This starts an async operation and polls for the result by default; set waitForResult to false to return the operation ID.',
+      'Search companies using The Hog company index API. Use this for account lists by ICP, market, firmographic filters, or known company names. For public website/LinkedIn URL discovery after an empty index result, use search_web or find_linkedin_companies. This may consume The Hog credits. This starts an async operation and polls for the result by default; set waitForResult to false to return the operation ID.',
     method: 'POST',
     path: '/api/v1/companies/search',
     endpointPath: '/api/v1/companies/search',
@@ -26,11 +27,12 @@ export const corePrimitiveTools: PrimitiveToolDefinition[] = [
     body: omitControlFields,
     idempotent: true,
     poll: 'operation',
+    decorateResult: withEmptySearchGuidance('companies'),
   }),
   endpointTool({
     name: 'search_people',
     description:
-      'Search people using The Hog people search API. Use this when the user wants contacts by role, seniority, company, location, or other public filters. This may consume The Hog credits. This starts an async operation and polls for the result by default; set waitForResult to false to return the operation ID.',
+      'Search people using The Hog indexed people search API. Use this for contact lists by role, seniority, company, location, or public filters. For exact named-person lookup, LinkedIn profile discovery, or dossier research after an empty index result, use search_web, submit_search with linkedin_keyword, or research_person. This may consume The Hog credits. This starts an async operation and polls for the result by default; set waitForResult to false to return the operation ID.',
     method: 'POST',
     path: '/api/v1/people/search',
     endpointPath: '/api/v1/people/search',
@@ -43,6 +45,7 @@ export const corePrimitiveTools: PrimitiveToolDefinition[] = [
     body: omitControlFields,
     idempotent: true,
     poll: 'operation',
+    decorateResult: withEmptySearchGuidance('people'),
   }),
   endpointTool({
     name: 'enrich_contact',

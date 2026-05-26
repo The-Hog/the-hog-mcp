@@ -79,7 +79,7 @@ export const researchWorkflowTools: WorkflowToolDefinition[] = [
   {
     name: 'research_person',
     description:
-      'Research a person or prospect and return a structured dossier. This can enrich a supplied identifier, search the web, and start deep research with a JSON Schema. This may consume The Hog credits. Defaults: web search enabled and polling enabled.',
+      'Research a person or prospect and return a structured dossier. Use this for questions like find information about a named person at a company, especially after search_people is empty. This can enrich a supplied identifier, search the web for public profile and LinkedIn evidence, and start deep research with a JSON Schema. This may consume The Hog credits. Defaults: web search enabled and polling enabled.',
     inputSchema: {
       name: z.string().min(1).max(200),
       company: z.string().min(1).max(200).optional(),

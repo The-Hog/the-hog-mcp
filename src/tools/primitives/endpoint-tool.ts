@@ -63,18 +63,29 @@ export function endpointTool(options: EndpointToolOptions): PrimitiveToolDefinit
             : pollTarget.kind === 'enrichment'
               ? await pollEnrichment(client, pollTarget.id, readPollOptions(input))
               : await pollOperation(client, pollTarget.id, readPollOptions(input));
-        return {
+        return decorateResult(options, input, {
           initial: response.data,
           final: pollResult.final,
           timedOut: pollResult.timedOut,
           pollAttempts: pollResult.attempts,
           requestId: response.requestId,
-        };
+        });
       }
 
-      return { response: response.data, requestId: response.requestId };
+      return decorateResult(options, input, {
+        response: response.data,
+        requestId: response.requestId,
+      });
     },
   };
+}
+
+function decorateResult(
+  options: EndpointToolOptions,
+  input: ToolInput,
+  result: unknown,
+): unknown {
+  return options.decorateResult ? options.decorateResult(result, input) : result;
 }
 
 export function omitControlFields(input: ToolInput): Record<string, unknown> {

@@ -83,6 +83,112 @@ test('async primitive tools strip MCP controls, set idempotency, and poll by def
   });
 });
 
+test('empty people search results include fallback guidance for public profile discovery', async () => {
+  const tool = primitiveTools.find((candidate) => candidate.name === 'search_people');
+  assert.ok(tool);
+
+  const result = await tool.execute(
+    {
+      query: 'Paulo Nascimento',
+      filters: {
+        company: {
+          names: ['The Hog'],
+          domains: ['thehog.ai'],
+        },
+      },
+    },
+    {
+      request: async (request: { method: string }) => {
+        if (request.method === 'POST') {
+          return {
+            data: { operationId: 'op_people', status: 'queued' },
+            status: 202,
+            requestId: 'req_people',
+          };
+        }
+        return {
+          data: {
+            id: 'op_people',
+            status: 'succeeded',
+            result: {
+              data: [],
+              meta: { resultCount: 0, providerOutcome: 'empty_clean' },
+            },
+          },
+          status: 200,
+          requestId: 'req_poll',
+        };
+      },
+      createIdempotencyKey: () => 'generated_search_people',
+    } as never,
+  );
+
+  const guidance = (result as { guidance?: Record<string, unknown> }).guidance;
+  assert.ok(guidance);
+  assert.match(String(guidance.resultInterpretation), /no records/i);
+  const recommended = guidance.recommendedNextTools as Array<{
+    tool: string;
+    suggestedInput?: { query?: string; type?: string; company?: string };
+  }>;
+  assert.deepEqual(
+    recommended.map((item) => item.tool),
+    ['search_web', 'submit_search', 'research_person'],
+  );
+  assert.equal(recommended[0]?.suggestedInput?.query, 'Paulo Nascimento The Hog thehog.ai LinkedIn');
+  assert.equal(recommended[1]?.suggestedInput?.type, 'linkedin_keyword');
+  assert.equal(recommended[2]?.suggestedInput?.company, 'The Hog');
+});
+
+test('empty company search results include fallback guidance for public discovery', async () => {
+  const tool = primitiveTools.find((candidate) => candidate.name === 'search_companies');
+  assert.ok(tool);
+
+  const result = await tool.execute(
+    {
+      query: 'The Hog',
+      filters: {
+        company: {
+          domains: ['thehog.ai'],
+        },
+      },
+    },
+    {
+      request: async (request: { method: string }) => {
+        if (request.method === 'POST') {
+          return {
+            data: { operationId: 'op_company', status: 'queued' },
+            status: 202,
+            requestId: 'req_company',
+          };
+        }
+        return {
+          data: {
+            id: 'op_company',
+            status: 'succeeded',
+            result: { data: [], meta: { resultCount: 0 } },
+          },
+          status: 200,
+          requestId: 'req_poll',
+        };
+      },
+      createIdempotencyKey: () => 'generated_search_companies',
+    } as never,
+  );
+
+  const guidance = (result as { guidance?: Record<string, unknown> }).guidance;
+  assert.ok(guidance);
+  const recommended = guidance.recommendedNextTools as Array<{
+    tool: string;
+    suggestedInput?: { query?: string; domains?: string[] };
+  }>;
+  assert.deepEqual(
+    recommended.map((item) => item.tool),
+    ['search_web', 'find_linkedin_companies'],
+  );
+  assert.equal(recommended[0]?.suggestedInput?.query, 'The Hog thehog.ai company LinkedIn website');
+  assert.deepEqual(recommended[1]?.suggestedInput?.domains, ['thehog.ai']);
+});
+
 test('async primitive tools do not repoll terminal initial responses', async () => {
   const tool = primitiveTools.find((candidate) => candidate.name === 'search_people');
   assert.ok(tool);
@@ -107,10 +213,21 @@ test('async primitive tools do not repoll terminal initial responses', async () 
     requests.map((request) => ({ method: request.method, path: request.path })),
     [{ method: 'POST', path: '/api/v1/people/search' }],
   );
-  assert.deepEqual(result, {
-    response: { operationId: 'op_people', status: 'succeeded', result: { data: [] } },
-    requestId: 'req_people',
-  });
+  assert.deepEqual(
+    {
+      response: (result as { response?: unknown }).response,
+      requestId: (result as { requestId?: unknown }).requestId,
+    },
+    {
+      response: { operationId: 'op_people', status: 'succeeded', result: { data: [] } },
+      requestId: 'req_people',
+    },
+  );
+  assert.equal(
+    ((result as { guidance?: { recommendedNextTools?: Array<{ tool: string }> } }).guidance
+      ?.recommendedNextTools ?? [])[0]?.tool,
+    'search_web',
+  );
 });
 
 test('async primitive tools do not repoll nested terminal initial responses', async () => {

@@ -7,7 +7,7 @@ export const webPrimitiveTools: PrimitiveToolDefinition[] = [
   endpointTool({
     name: 'search_web',
     description:
-      'Search the web and return normalized results. Use this for current web discovery. This may consume The Hog credits.',
+      'Search the web and return normalized results. Use this for current web discovery, public LinkedIn/profile URL lookup by person name and company, and fallback discovery when search_people or search_companies returns empty. This may consume The Hog credits.',
     method: 'POST',
     path: '/api/v1/platform/scrapers/web/search',
     endpointPath: '/api/v1/platform/scrapers/web/search',

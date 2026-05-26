@@ -21,6 +21,7 @@ export interface EndpointToolOptions {
   inputSchema: ToolShape;
   body?: (input: ToolInput) => unknown;
   query?: (input: ToolInput) => Record<string, unknown>;
+  decorateResult?: (result: unknown, input: ToolInput) => unknown;
   idempotent?: boolean;
   poll?: PollKind;
   requireConfirm?: boolean;
