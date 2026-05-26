@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { primitiveTools } from './definitions.js';
+import { endpointTool } from './endpoint-tool.js';
 
 test('delete monitor requires confirmation', async () => {
   const tool = primitiveTools.find((candidate) => candidate.name === 'delete_monitor');
@@ -18,7 +19,7 @@ test('delete monitor requires confirmation', async () => {
   );
 });
 
-test('async primitive tools strip MCP controls, set idempotency, and poll when requested', async () => {
+test('async primitive tools strip MCP controls, set idempotency, and poll by default', async () => {
   const tool = primitiveTools.find((candidate) => candidate.name === 'search_companies');
   assert.ok(tool);
 
@@ -32,7 +33,6 @@ test('async primitive tools strip MCP controls, set idempotency, and poll when r
     {
       query: 'AI infrastructure companies',
       limit: 5,
-      waitForResult: true,
       timeoutSeconds: 5,
       idempotencyKey: 'idem_123',
     },
@@ -154,7 +154,11 @@ test('mutating primitive tools expose idempotency and risk annotations', async (
 
     const requests: Array<{ body?: unknown; idempotencyKey?: string }> = [];
     await tool.execute(
-      { ...sampleInputs[tool.name], idempotencyKey: `idem_${tool.name}` },
+      {
+        ...sampleInputs[tool.name],
+        idempotencyKey: `idem_${tool.name}`,
+        waitForResult: false,
+      },
       {
         request: async (request: { body?: unknown; idempotencyKey?: string }) => {
           requests.push(request);
@@ -265,9 +269,10 @@ test('submit_search accepts non-query criteria and strips MCP controls', async (
     body: { type: 'tiktok_hashtag', hashtag: 'thehog' },
     idempotencyKey: 'idem_search',
   });
+  assert.equal(requests.length, 1);
 });
 
-test('enrichment polling uses the enrichment ID from queued responses', async () => {
+test('enrichment polling uses the enrichment ID from queued responses by default', async () => {
   const tool = primitiveTools.find((candidate) => candidate.name === 'enrich_contacts');
   assert.ok(tool);
 
@@ -276,7 +281,6 @@ test('enrichment polling uses the enrichment ID from queued responses', async ()
     {
       identifiers: [{ linkedin_url: 'https://www.linkedin.com/in/example' }],
       fields: ['contact.email'],
-      waitForResult: true,
       timeoutSeconds: 5,
     },
     {
@@ -306,7 +310,7 @@ test('enrichment polling uses the enrichment ID from queued responses', async ()
   assert.deepEqual(paths, ['/api/enrichments', '/api/enrichments/enrich_123']);
 });
 
-test('async primitive tools poll the correct status endpoint when requested', async () => {
+test('async primitive tools poll the correct status endpoint by default', async () => {
   const cases: Array<{
     name: string;
     input: Record<string, unknown>;
@@ -362,7 +366,7 @@ test('async primitive tools poll the correct status endpoint when requested', as
 
     const requests: Array<{ method: string; path: string; timeoutMs?: number }> = [];
     await tool.execute(
-      { ...item.input, waitForResult: true, timeoutSeconds: 5 },
+      { ...item.input, timeoutSeconds: 5 },
       {
         request: async (request: { method: string; path: string; timeoutMs?: number }) => {
           requests.push(request);
@@ -383,6 +387,122 @@ test('async primitive tools poll the correct status endpoint when requested', as
     assert.equal(requests[1]?.path, item.pollPath, item.name);
     assert.equal(requests[1]?.timeoutMs, 5000, item.name);
   }
+});
+
+test('async primitive tools return queued responses when polling is explicitly disabled', async () => {
+  const tool = primitiveTools.find((candidate) => candidate.name === 'search_people');
+  assert.ok(tool);
+
+  const requests: Array<{ method: string; path: string }> = [];
+  const result = await tool.execute(
+    { query: 'security engineers', waitForResult: false },
+    {
+      request: async (request: { method: string; path: string }) => {
+        requests.push(request);
+        return {
+          data: { operationId: 'op_people', status: 'queued' },
+          status: 202,
+          requestId: 'req_people',
+        };
+      },
+      createIdempotencyKey: () => 'generated_search_people',
+    } as never,
+  );
+
+  assert.deepEqual(
+    requests.map((request) => ({ method: request.method, path: request.path })),
+    [{ method: 'POST', path: '/api/v1/people/search' }],
+  );
+  assert.deepEqual(result, {
+    response: { operationId: 'op_people', status: 'queued' },
+    requestId: 'req_people',
+  });
+});
+
+test('configured async primitive tools poll operation IDs even without an initial status', async () => {
+  const tool = primitiveTools.find((candidate) => candidate.name === 'search_people');
+  assert.ok(tool);
+
+  const requests: Array<{ method: string; path: string }> = [];
+  await tool.execute(
+    { query: 'security engineers' },
+    {
+      request: async (request: { method: string; path: string }) => {
+        requests.push(request);
+        if (request.method === 'POST') {
+          return {
+            data: { operationId: 'op_people' },
+            status: 200,
+            requestId: 'req_people',
+          };
+        }
+        return {
+          data: { id: 'op_people', status: 'succeeded', result: { data: [] } },
+          status: 200,
+          requestId: 'req_people_poll',
+        };
+      },
+      createIdempotencyKey: () => 'generated_search_people',
+    } as never,
+  );
+
+  assert.deepEqual(
+    requests.map((request) => ({ method: request.method, path: request.path })),
+    [
+      { method: 'POST', path: '/api/v1/people/search' },
+      { method: 'GET', path: '/api/operations/op_people' },
+    ],
+  );
+});
+
+test('primitive tools infer operation polling from queued operationId responses', async () => {
+  const tool = endpointTool({
+    name: 'async_unconfigured_tool',
+    description: 'Test tool',
+    method: 'POST',
+    path: '/api/custom-async',
+    endpointPath: '/api/custom-async',
+    inputSchema: {},
+    idempotent: true,
+  });
+
+  const requests: Array<{ method: string; path: string }> = [];
+  const result = await tool.execute(
+    {},
+    {
+      request: async (request: { method: string; path: string }) => {
+        requests.push(request);
+        if (request.method === 'POST') {
+          return {
+            data: { operationId: 'op_custom', status: 'queued' },
+            status: 202,
+            requestId: 'req_custom',
+          };
+        }
+        return {
+          data: { id: 'op_custom', status: 'succeeded', result: { ok: true } },
+          status: 200,
+          requestId: 'req_custom_poll',
+        };
+      },
+      createIdempotencyKey: () => 'generated_custom',
+    } as never,
+  );
+
+  assert.deepEqual(
+    requests.map((request) => ({ method: request.method, path: request.path })),
+    [
+      { method: 'POST', path: '/api/custom-async' },
+      { method: 'GET', path: '/api/operations/op_custom' },
+    ],
+  );
+  assert.deepEqual(result, {
+    initial: { operationId: 'op_custom', status: 'queued' },
+    final: { id: 'op_custom', status: 'succeeded', result: { ok: true } },
+    timedOut: false,
+    pollAttempts: 1,
+    requestId: 'req_custom',
+  });
 });
 
 test('linkedin primitive tools send public OpenAPI-shaped request bodies', async () => {

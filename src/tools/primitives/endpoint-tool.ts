@@ -50,17 +50,14 @@ export function endpointTool(options: EndpointToolOptions): PrimitiveToolDefinit
             : undefined,
       });
 
-      if (input.waitForResult === true && options.poll) {
-        const id = readAsyncId(response.data, options.poll);
-        if (!id) {
-          return { response: response.data, requestId: response.requestId };
-        }
+      const pollTarget = readPollTarget(response.data, options.poll);
+      if (pollTarget && shouldPoll(input, response.status, response.data, options.poll)) {
         const pollResult =
-          options.poll === 'search'
-            ? await pollSearchResult(client, id, readPollOptions(input))
-            : options.poll === 'enrichment'
-              ? await pollEnrichment(client, id, readPollOptions(input))
-              : await pollOperation(client, id, readPollOptions(input));
+          pollTarget.kind === 'search'
+            ? await pollSearchResult(client, pollTarget.id, readPollOptions(input))
+            : pollTarget.kind === 'enrichment'
+              ? await pollEnrichment(client, pollTarget.id, readPollOptions(input))
+              : await pollOperation(client, pollTarget.id, readPollOptions(input));
         return {
           initial: response.data,
           final: pollResult.final,
@@ -107,6 +104,99 @@ function readPollOptions(input: ToolInput): { timeoutSeconds?: number } {
     ? { timeoutSeconds: input.timeoutSeconds }
     : {};
 }
+
+function shouldPoll(
+  input: ToolInput,
+  responseStatus: number,
+  responseData: unknown,
+  configuredPoll: PollKind | undefined,
+): boolean {
+  if (input.waitForResult === false) {
+    return false;
+  }
+  if (input.waitForResult === true) {
+    return true;
+  }
+  if (configuredPoll) {
+    const status = readStatus(responseData);
+    return !status || !TERMINAL_STATUSES.has(status);
+  }
+  return isAsyncOperationResponse(responseStatus, responseData);
+}
+
+function readPollTarget(
+  value: unknown,
+  configuredPoll: PollKind | undefined,
+): { kind: PollKind; id: string } | null {
+  if (configuredPoll) {
+    const id = readAsyncId(value, configuredPoll);
+    return id ? { kind: configuredPoll, id } : null;
+  }
+
+  const operationId = readOperationId(value);
+  return operationId ? { kind: 'operation', id: operationId } : null;
+}
+
+function isAsyncResponse(responseStatus: number, responseData: unknown): boolean {
+  if (responseStatus === 202) {
+    return true;
+  }
+  const status = readStatus(responseData);
+  return status ? ASYNC_STATUSES.has(status) : false;
+}
+
+function isAsyncOperationResponse(responseStatus: number, responseData: unknown): boolean {
+  return readOperationId(responseData) !== null && isAsyncResponse(responseStatus, responseData);
+}
+
+function readStatus(value: unknown): string | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+  const record = value as { status?: unknown; data?: { status?: unknown } };
+  if (typeof record.status === 'string') {
+    return record.status.toLowerCase();
+  }
+  if (typeof record.data?.status === 'string') {
+    return record.data.status.toLowerCase();
+  }
+  return null;
+}
+
+function readOperationId(value: unknown): string | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+  const record = value as { operationId?: unknown; data?: { operationId?: unknown } };
+  if (typeof record.operationId === 'string') {
+    return record.operationId;
+  }
+  if (typeof record.data?.operationId === 'string') {
+    return record.data.operationId;
+  }
+  return null;
+}
+
+const ASYNC_STATUSES = new Set([
+  'queued',
+  'pending',
+  'running',
+  'processing',
+  'in_progress',
+  'started',
+  'scheduled',
+]);
+
+const TERMINAL_STATUSES = new Set([
+  'succeeded',
+  'completed',
+  'complete',
+  'failed',
+  'error',
+  'cancelled',
+  'canceled',
+  'partial_success',
+]);
 
 export function readAsyncId(value: unknown, pollKind: PollKind = 'operation'): string | null {
   if (!value || typeof value !== 'object') {

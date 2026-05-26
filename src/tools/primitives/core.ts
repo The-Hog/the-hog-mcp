@@ -14,7 +14,7 @@ export const corePrimitiveTools: PrimitiveToolDefinition[] = [
   endpointTool({
     name: 'search_companies',
     description:
-      'Search companies using The Hog company search API. Use this when the user wants to find accounts matching a natural-language ICP, company name, market, or filter set. This may consume The Hog credits. This starts an async operation and returns an operation ID unless waitForResult is true.',
+      'Search companies using The Hog company search API. Use this when the user wants to find accounts matching a natural-language ICP, company name, market, or filter set. This may consume The Hog credits. This starts an async operation and polls for the result by default; set waitForResult to false to return the operation ID.',
     method: 'POST',
     path: '/api/v1/companies/search',
     endpointPath: '/api/v1/companies/search',
@@ -30,7 +30,7 @@ export const corePrimitiveTools: PrimitiveToolDefinition[] = [
   endpointTool({
     name: 'search_people',
     description:
-      'Search people using The Hog people search API. Use this when the user wants contacts by role, seniority, company, location, or other public filters. This may consume The Hog credits. This starts an async operation and returns an operation ID unless waitForResult is true.',
+      'Search people using The Hog people search API. Use this when the user wants contacts by role, seniority, company, location, or other public filters. This may consume The Hog credits. This starts an async operation and polls for the result by default; set waitForResult to false to return the operation ID.',
     method: 'POST',
     path: '/api/v1/people/search',
     endpointPath: '/api/v1/people/search',
@@ -47,7 +47,7 @@ export const corePrimitiveTools: PrimitiveToolDefinition[] = [
   endpointTool({
     name: 'enrich_contact',
     description:
-      'Enrich one person with requested contact fields or signals. Use this when the user has a LinkedIn URL, email, X handle, or GitHub username and needs enrichment. This may consume The Hog credits. Small requests may complete immediately; otherwise this returns an operation unless waitForResult is true.',
+      'Enrich one person with requested contact fields or signals. Use this when the user has a LinkedIn URL, email, X handle, or GitHub username and needs enrichment. This may consume The Hog credits. Async enrichments poll for the result by default; set waitForResult to false to return the enrichment ID.',
     method: 'POST',
     path: '/api/enrichments',
     endpointPath: '/api/enrichments',
@@ -65,7 +65,7 @@ export const corePrimitiveTools: PrimitiveToolDefinition[] = [
   endpointTool({
     name: 'enrich_contacts',
     description:
-      'Batch enrich people with requested contact fields or signals. Use this when the user has multiple LinkedIn URLs, emails, X handles, or GitHub usernames. This may consume The Hog credits and may return an async operation unless waitForResult is true.',
+      'Batch enrich people with requested contact fields or signals. Use this when the user has multiple LinkedIn URLs, emails, X handles, or GitHub usernames. This may consume The Hog credits. Async enrichments poll for the result by default; set waitForResult to false to return the enrichment ID.',
     method: 'POST',
     path: '/api/enrichments',
     endpointPath: '/api/enrichments',
@@ -83,7 +83,7 @@ export const corePrimitiveTools: PrimitiveToolDefinition[] = [
   endpointTool({
     name: 'start_deep_research',
     description:
-      'Start a structured deep research job with a prompt and JSON Schema. Use this when the user needs sourced research returned in a specific JSON shape. This may consume The Hog credits and returns an operation unless waitForResult is true.',
+      'Start a structured deep research job with a prompt and JSON Schema. Use this when the user needs sourced research returned in a specific JSON shape. This may consume The Hog credits and polls for the result by default; set waitForResult to false to return the operation ID.',
     method: 'POST',
     path: '/api/deep-research',
     endpointPath: '/api/deep-research',
