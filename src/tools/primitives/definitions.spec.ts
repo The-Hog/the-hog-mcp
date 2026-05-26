@@ -109,6 +109,20 @@ test('mutating primitive tools expose idempotency and risk annotations', async (
     list_instagram_followers: { username: 'example' },
     list_instagram_following: { username: 'example' },
     get_tiktok_profile: { username: 'example' },
+    find_linkedin_companies: { domains: ['https://example.com'] },
+    get_linkedin_company: { identifier: 'example-company' },
+    list_linkedin_company_posts: { companySlug: 'example-company' },
+    search_linkedin_posts: { keyword: 'b2b saas' },
+    get_linkedin_profile: { username: 'example-profile' },
+    list_linkedin_profile_posts: { username: 'example-profile' },
+    list_linkedin_post_comments: {
+      postUrls: ['https://www.linkedin.com/feed/update/urn:li:activity:123'],
+    },
+    list_linkedin_post_reactions: {
+      postUrls: ['https://www.linkedin.com/feed/update/urn:li:activity:123'],
+    },
+    list_linkedin_profile_comments: { profiles: ['example-profile'] },
+    list_linkedin_profile_reactions: { profiles: ['example-profile'] },
     create_monitor: {
       name: 'Site monitor',
       type: 'site_search',
@@ -290,4 +304,180 @@ test('enrichment polling uses the enrichment ID from queued responses', async ()
   );
 
   assert.deepEqual(paths, ['/api/enrichments', '/api/enrichments/enrich_123']);
+});
+
+test('async primitive tools poll the correct status endpoint when requested', async () => {
+  const cases: Array<{
+    name: string;
+    input: Record<string, unknown>;
+    queued: Record<string, unknown>;
+    pollPath: string;
+  }> = [
+    {
+      name: 'search_companies',
+      input: { query: 'security companies' },
+      queued: { operationId: 'op_companies', status: 'queued' },
+      pollPath: '/api/operations/op_companies',
+    },
+    {
+      name: 'search_people',
+      input: { query: 'security engineers' },
+      queued: { operationId: 'op_people', status: 'queued' },
+      pollPath: '/api/operations/op_people',
+    },
+    {
+      name: 'start_deep_research',
+      input: { prompt: 'Research Acme', schema: { type: 'object' } },
+      queued: { operationId: 'op_research', status: 'queued' },
+      pollPath: '/api/operations/op_research',
+    },
+    {
+      name: 'enrich_contact',
+      input: { identifier: { email: 'ada@example.com' }, fields: ['contact.email'] },
+      queued: { id: 'enrich_one', status: 'queued' },
+      pollPath: '/api/enrichments/enrich_one',
+    },
+    {
+      name: 'enrich_contacts',
+      input: {
+        identifiers: [{ email: 'ada@example.com' }],
+        fields: ['contact.email'],
+      },
+      queued: { id: 'enrich_batch', status: 'queued' },
+      pollPath: '/api/enrichments/enrich_batch',
+    },
+    {
+      name: 'submit_search',
+      input: { type: 'web_search', query: 'the hog api' },
+      queued: { id: 'search_123', status: 'queued' },
+      pollPath: '/api/v1/search/search_123',
+    },
+  ];
+
+  for (const item of cases) {
+    const tool = primitiveTools.find((candidate) => candidate.name === item.name);
+    assert.ok(tool, item.name);
+    assert.ok(tool.inputSchema.waitForResult, `${item.name} exposes waitForResult`);
+    assert.ok(tool.inputSchema.timeoutSeconds, `${item.name} exposes timeoutSeconds`);
+
+    const requests: Array<{ method: string; path: string; timeoutMs?: number }> = [];
+    await tool.execute(
+      { ...item.input, waitForResult: true, timeoutSeconds: 5 },
+      {
+        request: async (request: { method: string; path: string; timeoutMs?: number }) => {
+          requests.push(request);
+          if (request.method === 'POST') {
+            return { data: item.queued, status: 202, requestId: `req_${item.name}` };
+          }
+          return {
+            data: { id: item.pollPath.split('/').at(-1), status: 'completed' },
+            status: 200,
+            requestId: `req_poll_${item.name}`,
+          };
+        },
+        createIdempotencyKey: () => `generated_${item.name}`,
+      } as never,
+    );
+
+    assert.equal(requests[1]?.method, 'GET', item.name);
+    assert.equal(requests[1]?.path, item.pollPath, item.name);
+    assert.equal(requests[1]?.timeoutMs, 5000, item.name);
+  }
+});
+
+test('linkedin primitive tools send public OpenAPI-shaped request bodies', async () => {
+  const cases: Array<{
+    name: string;
+    input: Record<string, unknown>;
+    body: Record<string, unknown>;
+  }> = [
+    {
+      name: 'find_linkedin_companies',
+      input: { domains: ['https://example.com'] },
+      body: { domains: ['https://example.com'] },
+    },
+    {
+      name: 'get_linkedin_company',
+      input: { identifier: 'example-company' },
+      body: { identifier: 'example-company' },
+    },
+    {
+      name: 'list_linkedin_company_posts',
+      input: { companySlug: 'example-company', limit: 25 },
+      body: { companySlug: 'example-company', limit: 25 },
+    },
+    {
+      name: 'search_linkedin_posts',
+      input: {
+        keyword: 'b2b saas',
+        config: { limit: 25, sortBy: 'recent', dateFilter: 'past-week', matchMode: 'broad' },
+      },
+      body: {
+        keyword: 'b2b saas',
+        config: { limit: 25, sortBy: 'recent', dateFilter: 'past-week', matchMode: 'broad' },
+      },
+    },
+    {
+      name: 'get_linkedin_profile',
+      input: { username: 'example-profile' },
+      body: { username: 'example-profile' },
+    },
+    {
+      name: 'list_linkedin_profile_posts',
+      input: { username: 'example-profile', maxPosts: 25 },
+      body: { username: 'example-profile', maxPosts: 25 },
+    },
+    {
+      name: 'list_linkedin_post_comments',
+      input: {
+        postUrls: ['https://www.linkedin.com/feed/update/urn:li:activity:123'],
+        maxItems: 25,
+      },
+      body: {
+        postUrls: ['https://www.linkedin.com/feed/update/urn:li:activity:123'],
+        maxItems: 25,
+      },
+    },
+    {
+      name: 'list_linkedin_post_reactions',
+      input: {
+        postUrls: ['https://www.linkedin.com/feed/update/urn:li:activity:123'],
+        maxItems: 25,
+      },
+      body: {
+        postUrls: ['https://www.linkedin.com/feed/update/urn:li:activity:123'],
+        maxItems: 25,
+      },
+    },
+    {
+      name: 'list_linkedin_profile_comments',
+      input: { profiles: ['example-profile'], maxItems: 25, postedLimit: 'week' },
+      body: { profiles: ['example-profile'], maxItems: 25, postedLimit: 'week' },
+    },
+    {
+      name: 'list_linkedin_profile_reactions',
+      input: { profiles: ['example-profile'], maxItems: 25, postedLimit: 'week' },
+      body: { profiles: ['example-profile'], maxItems: 25, postedLimit: 'week' },
+    },
+  ];
+
+  for (const item of cases) {
+    const tool = primitiveTools.find((candidate) => candidate.name === item.name);
+    assert.ok(tool, item.name);
+
+    const requests: Array<{ body?: unknown; idempotencyKey?: string }> = [];
+    await tool.execute(
+      { ...item.input, idempotencyKey: `idem_${item.name}` },
+      {
+        request: async (request: { body?: unknown; idempotencyKey?: string }) => {
+          requests.push(request);
+          return { data: { ok: true }, status: 200, requestId: null };
+        },
+        createIdempotencyKey: () => `generated_${item.name}`,
+      } as never,
+    );
+
+    assert.deepEqual(requests[0]?.body, item.body, item.name);
+    assert.equal(requests[0]?.idempotencyKey, `idem_${item.name}`, item.name);
+  }
 });
