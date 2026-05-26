@@ -306,6 +306,85 @@ test('enrichment polling uses the enrichment ID from queued responses', async ()
   assert.deepEqual(paths, ['/api/enrichments', '/api/enrichments/enrich_123']);
 });
 
+test('async primitive tools poll the correct status endpoint when requested', async () => {
+  const cases: Array<{
+    name: string;
+    input: Record<string, unknown>;
+    queued: Record<string, unknown>;
+    pollPath: string;
+  }> = [
+    {
+      name: 'search_companies',
+      input: { query: 'security companies' },
+      queued: { operationId: 'op_companies', status: 'queued' },
+      pollPath: '/api/operations/op_companies',
+    },
+    {
+      name: 'search_people',
+      input: { query: 'security engineers' },
+      queued: { operationId: 'op_people', status: 'queued' },
+      pollPath: '/api/operations/op_people',
+    },
+    {
+      name: 'start_deep_research',
+      input: { prompt: 'Research Acme', schema: { type: 'object' } },
+      queued: { operationId: 'op_research', status: 'queued' },
+      pollPath: '/api/operations/op_research',
+    },
+    {
+      name: 'enrich_contact',
+      input: { identifier: { email: 'ada@example.com' }, fields: ['contact.email'] },
+      queued: { id: 'enrich_one', status: 'queued' },
+      pollPath: '/api/enrichments/enrich_one',
+    },
+    {
+      name: 'enrich_contacts',
+      input: {
+        identifiers: [{ email: 'ada@example.com' }],
+        fields: ['contact.email'],
+      },
+      queued: { id: 'enrich_batch', status: 'queued' },
+      pollPath: '/api/enrichments/enrich_batch',
+    },
+    {
+      name: 'submit_search',
+      input: { type: 'web_search', query: 'the hog api' },
+      queued: { id: 'search_123', status: 'queued' },
+      pollPath: '/api/v1/search/search_123',
+    },
+  ];
+
+  for (const item of cases) {
+    const tool = primitiveTools.find((candidate) => candidate.name === item.name);
+    assert.ok(tool, item.name);
+    assert.ok(tool.inputSchema.waitForResult, `${item.name} exposes waitForResult`);
+    assert.ok(tool.inputSchema.timeoutSeconds, `${item.name} exposes timeoutSeconds`);
+
+    const requests: Array<{ method: string; path: string; timeoutMs?: number }> = [];
+    await tool.execute(
+      { ...item.input, waitForResult: true, timeoutSeconds: 5 },
+      {
+        request: async (request: { method: string; path: string; timeoutMs?: number }) => {
+          requests.push(request);
+          if (request.method === 'POST') {
+            return { data: item.queued, status: 202, requestId: `req_${item.name}` };
+          }
+          return {
+            data: { id: item.pollPath.split('/').at(-1), status: 'completed' },
+            status: 200,
+            requestId: `req_poll_${item.name}`,
+          };
+        },
+        createIdempotencyKey: () => `generated_${item.name}`,
+      } as never,
+    );
+
+    assert.equal(requests[1]?.method, 'GET', item.name);
+    assert.equal(requests[1]?.path, item.pollPath, item.name);
+    assert.equal(requests[1]?.timeoutMs, 5000, item.name);
+  }
+});
+
 test('linkedin primitive tools send public OpenAPI-shaped request bodies', async () => {
   const cases: Array<{
     name: string;
