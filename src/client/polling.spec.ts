@@ -27,6 +27,55 @@ test('pollOperation treats partial_success as terminal', async () => {
   assert.equal(typeof requests[0]?.timeoutMs, 'number');
 });
 
+test('pollOperation treats nested data.status as terminal', async () => {
+  const result = await pollOperation(
+    {
+      request: async () => ({
+        data: { id: 'op_1', data: { status: 'succeeded', results: [] } },
+        status: 200,
+        requestId: 'req_1',
+      }),
+    } as never,
+    'op_1',
+    { timeoutSeconds: 1, intervalMs: 250 },
+  );
+
+  assert.equal(result.timedOut, false);
+  assert.equal(result.attempts, 1);
+  assert.deepEqual(result.final, {
+    id: 'op_1',
+    data: { status: 'succeeded', results: [] },
+  });
+});
+
+test('pollOperation continues past nested non-terminal status', async () => {
+  let calls = 0;
+  const result = await pollOperation(
+    {
+      request: async () => {
+        calls += 1;
+        return {
+          data:
+            calls === 1
+              ? { id: 'op_1', data: { status: 'running' } }
+              : { id: 'op_1', data: { status: 'succeeded', results: ['done'] } },
+          status: 200,
+          requestId: 'req_1',
+        };
+      },
+    } as never,
+    'op_1',
+    { timeoutSeconds: 1, intervalMs: 250 },
+  );
+
+  assert.equal(result.timedOut, false);
+  assert.equal(result.attempts, 2);
+  assert.deepEqual(result.final, {
+    id: 'op_1',
+    data: { status: 'succeeded', results: ['done'] },
+  });
+});
+
 test('pollOperation returns timedOut after non-terminal responses', async () => {
   const result = await pollOperation(
     {

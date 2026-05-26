@@ -8,7 +8,7 @@ export const searchPrimitiveTools: PrimitiveToolDefinition[] = [
   endpointTool({
     name: 'submit_search',
     description:
-      'Submit a search across supported web and social sources. Use this when the user wants web, site, LinkedIn keyword, X keyword, Reddit, TikTok keyword, or TikTok hashtag search through The Hog. This may consume The Hog credits and returns a search ID unless waitForResult is true.',
+      'Submit a search across supported web and social sources. Use this when the user wants web, site, LinkedIn keyword, X keyword, Reddit, TikTok keyword, or TikTok hashtag search through The Hog. This may consume The Hog credits and polls for the result by default; set waitForResult to false to return the search ID.',
     method: 'POST',
     path: '/api/v1/search',
     endpointPath: '/api/v1/search',

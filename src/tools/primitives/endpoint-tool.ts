@@ -3,6 +3,11 @@ import {
   pollOperation,
   pollSearchResult,
 } from '../../client/polling.js';
+import {
+  isAsyncStatus,
+  isTerminalStatus,
+  readStatus,
+} from '../../client/operation-status.js';
 import { stripUndefined } from '../../client/thehog-client.js';
 import type {
   EndpointToolOptions,
@@ -50,17 +55,14 @@ export function endpointTool(options: EndpointToolOptions): PrimitiveToolDefinit
             : undefined,
       });
 
-      if (input.waitForResult === true && options.poll) {
-        const id = readAsyncId(response.data, options.poll);
-        if (!id) {
-          return { response: response.data, requestId: response.requestId };
-        }
+      const pollTarget = readPollTarget(response.data, options.poll);
+      if (pollTarget && shouldPoll(input, response.status, response.data, options.poll)) {
         const pollResult =
-          options.poll === 'search'
-            ? await pollSearchResult(client, id, readPollOptions(input))
-            : options.poll === 'enrichment'
-              ? await pollEnrichment(client, id, readPollOptions(input))
-              : await pollOperation(client, id, readPollOptions(input));
+          pollTarget.kind === 'search'
+            ? await pollSearchResult(client, pollTarget.id, readPollOptions(input))
+            : pollTarget.kind === 'enrichment'
+              ? await pollEnrichment(client, pollTarget.id, readPollOptions(input))
+              : await pollOperation(client, pollTarget.id, readPollOptions(input));
         return {
           initial: response.data,
           final: pollResult.final,
@@ -106,6 +108,66 @@ function readPollOptions(input: ToolInput): { timeoutSeconds?: number } {
   return typeof input.timeoutSeconds === 'number'
     ? { timeoutSeconds: input.timeoutSeconds }
     : {};
+}
+
+function shouldPoll(
+  input: ToolInput,
+  responseStatus: number,
+  responseData: unknown,
+  configuredPoll: PollKind | undefined,
+): boolean {
+  if (input.waitForResult === false) {
+    return false;
+  }
+  const status = readStatus(responseData);
+  if (isTerminalStatus(status)) {
+    return false;
+  }
+  if (input.waitForResult === true) {
+    return true;
+  }
+  if (configuredPoll) {
+    return true;
+  }
+  return isAsyncOperationResponse(responseStatus, responseData);
+}
+
+function readPollTarget(
+  value: unknown,
+  configuredPoll: PollKind | undefined,
+): { kind: PollKind; id: string } | null {
+  if (configuredPoll) {
+    const id = readAsyncId(value, configuredPoll);
+    return id ? { kind: configuredPoll, id } : null;
+  }
+
+  const operationId = readOperationId(value);
+  return operationId ? { kind: 'operation', id: operationId } : null;
+}
+
+function isAsyncResponse(responseStatus: number, responseData: unknown): boolean {
+  if (responseStatus === 202) {
+    return true;
+  }
+  return isAsyncStatus(readStatus(responseData));
+}
+
+function isAsyncOperationResponse(responseStatus: number, responseData: unknown): boolean {
+  return readOperationId(responseData) !== null && isAsyncResponse(responseStatus, responseData);
+}
+
+function readOperationId(value: unknown): string | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+  const record = value as { operationId?: unknown; data?: { operationId?: unknown } };
+  if (typeof record.operationId === 'string') {
+    return record.operationId;
+  }
+  if (typeof record.data?.operationId === 'string') {
+    return record.data.operationId;
+  }
+  return null;
 }
 
 export function readAsyncId(value: unknown, pollKind: PollKind = 'operation'): string | null {
