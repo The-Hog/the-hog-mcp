@@ -3,7 +3,29 @@
 Run The Hog API from MCP clients such as Claude, Claude Code, Cursor, Codex,
 VS Code, and Windsurf.
 
+The Hog supports two MCP setup options:
+
+| Option | Best for | Authentication |
+| --- | --- | --- |
+| Hosted remote MCP | Claude web/desktop connectors and users who do not want to install Node or manage local config files | Sign in with The Hog through OAuth |
+| Local stdio MCP | Claude Code, Cursor, Codex, VS Code, Windsurf, and local coding agents that run a command on your machine | Pass your The Hog API key and API secret as environment variables |
+
 ## Quick Start
+
+### Hosted remote MCP
+
+Use this URL in any MCP client that supports remote connectors:
+
+```text
+https://mcp.thehog.ai/mcp
+```
+
+Remote MCP uses OAuth. You do not need to create or paste an API key. Your MCP
+client opens a browser sign-in flow, you sign in with The Hog, and the connector
+is associated with the organization you select. Remote connections can be
+revoked from the Remote MCP page in the dashboard.
+
+### Local stdio MCP
 
 Use the API key and API secret from the Credentials page:
 
@@ -33,10 +55,9 @@ variables instead of writing keys directly into a config file.
 
 ### Claude Desktop
 
-For regular Claude chat, use the Claude Desktop app. The claude.ai web app
-cannot launch a local stdio command like `npx`; hosted remote MCP connectors are
-a different deployment model. Claude Desktop uses a local JSON config file for
-MCP servers.
+For Claude web or hosted Claude connectors, use `https://mcp.thehog.ai/mcp`.
+Use this local stdio setup when Claude Desktop is running MCP commands on your
+machine. Claude Desktop uses a local JSON config file for MCP servers.
 
 Config locations:
 
@@ -191,10 +212,12 @@ Refresh MCP servers from Cascade after saving.
 
 ## Authentication
 
-Dashboard-created credentials require both `THEHOG_ACCESS_KEY` and
-`THEHOG_SECRET_KEY`. Do not commit config files that contain real credentials.
-Prefer user-level MCP configuration for personal credentials, or use your
-client's environment-variable or secret-input support where available.
+Hosted remote MCP uses OAuth and does not require you to paste API keys into
+your MCP client. Dashboard-created local stdio credentials require both
+`THEHOG_ACCESS_KEY` and `THEHOG_SECRET_KEY`. Do not commit config files that
+contain real credentials. Prefer user-level MCP configuration for personal
+credentials, or use your client's environment-variable or secret-input support
+where available.
 
 ## Library API
 
@@ -224,11 +247,15 @@ time.
 
 ## Security
 
-The server runs locally over stdio and calls The Hog API endpoints under
-`https://developer.thehog.ai/api/...` with your The Hog API credentials. The
-configurable base URL is `https://developer.thehog.ai`; endpoint paths include
-`/api/...`. It does not host a public endpoint and does not require OAuth for
-local stdio use. Do not commit MCP config files that contain real API keys.
+The local stdio server runs on your machine and calls The Hog API endpoints
+under `https://developer.thehog.ai/api/...` with your The Hog API credentials.
+The configurable base URL is `https://developer.thehog.ai`; endpoint paths
+include `/api/...`. It does not host a public endpoint and does not require
+OAuth for local stdio use. Do not commit MCP config files that contain real API
+keys.
+
+The hosted remote MCP server runs at `https://mcp.thehog.ai/mcp`, uses OAuth,
+and can be revoked from the dashboard.
 
 ## Source
 
