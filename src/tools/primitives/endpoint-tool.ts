@@ -3,6 +3,11 @@ import {
   pollOperation,
   pollSearchResult,
 } from '../../client/polling.js';
+import {
+  isAsyncStatus,
+  isTerminalStatus,
+  readStatus,
+} from '../../client/operation-status.js';
 import { stripUndefined } from '../../client/thehog-client.js';
 import type {
   EndpointToolOptions,
@@ -114,12 +119,15 @@ function shouldPoll(
   if (input.waitForResult === false) {
     return false;
   }
+  const status = readStatus(responseData);
+  if (isTerminalStatus(status)) {
+    return false;
+  }
   if (input.waitForResult === true) {
     return true;
   }
   if (configuredPoll) {
-    const status = readStatus(responseData);
-    return !status || !TERMINAL_STATUSES.has(status);
+    return true;
   }
   return isAsyncOperationResponse(responseStatus, responseData);
 }
@@ -141,26 +149,11 @@ function isAsyncResponse(responseStatus: number, responseData: unknown): boolean
   if (responseStatus === 202) {
     return true;
   }
-  const status = readStatus(responseData);
-  return status ? ASYNC_STATUSES.has(status) : false;
+  return isAsyncStatus(readStatus(responseData));
 }
 
 function isAsyncOperationResponse(responseStatus: number, responseData: unknown): boolean {
   return readOperationId(responseData) !== null && isAsyncResponse(responseStatus, responseData);
-}
-
-function readStatus(value: unknown): string | null {
-  if (!value || typeof value !== 'object') {
-    return null;
-  }
-  const record = value as { status?: unknown; data?: { status?: unknown } };
-  if (typeof record.status === 'string') {
-    return record.status.toLowerCase();
-  }
-  if (typeof record.data?.status === 'string') {
-    return record.data.status.toLowerCase();
-  }
-  return null;
 }
 
 function readOperationId(value: unknown): string | null {
@@ -176,27 +169,6 @@ function readOperationId(value: unknown): string | null {
   }
   return null;
 }
-
-const ASYNC_STATUSES = new Set([
-  'queued',
-  'pending',
-  'running',
-  'processing',
-  'in_progress',
-  'started',
-  'scheduled',
-]);
-
-const TERMINAL_STATUSES = new Set([
-  'succeeded',
-  'completed',
-  'complete',
-  'failed',
-  'error',
-  'cancelled',
-  'canceled',
-  'partial_success',
-]);
 
 export function readAsyncId(value: unknown, pollKind: PollKind = 'operation'): string | null {
   if (!value || typeof value !== 'object') {

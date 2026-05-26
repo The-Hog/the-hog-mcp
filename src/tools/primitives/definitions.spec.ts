@@ -83,6 +83,36 @@ test('async primitive tools strip MCP controls, set idempotency, and poll by def
   });
 });
 
+test('async primitive tools do not repoll terminal initial responses', async () => {
+  const tool = primitiveTools.find((candidate) => candidate.name === 'search_people');
+  assert.ok(tool);
+
+  const requests: Array<{ method: string; path: string }> = [];
+  const result = await tool.execute(
+    { query: 'security engineers', waitForResult: true },
+    {
+      request: async (request: { method: string; path: string }) => {
+        requests.push(request);
+        return {
+          data: { operationId: 'op_people', status: 'succeeded', result: { data: [] } },
+          status: 200,
+          requestId: 'req_people',
+        };
+      },
+      createIdempotencyKey: () => 'generated_search_people',
+    } as never,
+  );
+
+  assert.deepEqual(
+    requests.map((request) => ({ method: request.method, path: request.path })),
+    [{ method: 'POST', path: '/api/v1/people/search' }],
+  );
+  assert.deepEqual(result, {
+    response: { operationId: 'op_people', status: 'succeeded', result: { data: [] } },
+    requestId: 'req_people',
+  });
+});
+
 test('mutating primitive tools expose idempotency and risk annotations', async () => {
   const sampleInputs: Record<string, Record<string, unknown>> = {
     search_companies: { query: 'security companies' },

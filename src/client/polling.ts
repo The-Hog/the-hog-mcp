@@ -1,3 +1,4 @@
+import { isTerminalStatus, readStatus } from './operation-status.js';
 import type { TheHogToolClient } from './thehog-client.js';
 
 export interface PollOptions {
@@ -13,16 +14,6 @@ export interface PollResult {
 
 const DEFAULT_TIMEOUT_SECONDS = 90;
 const DEFAULT_INTERVAL_MS = 2_000;
-const TERMINAL_STATUSES = new Set([
-  'succeeded',
-  'completed',
-  'complete',
-  'failed',
-  'error',
-  'cancelled',
-  'canceled',
-  'partial_success',
-]);
 
 export async function pollOperation(
   client: TheHogToolClient,
@@ -70,21 +61,13 @@ async function pollPath(
     const response = await client.request({ method: 'GET', path, timeoutMs });
     latest = response.data;
     const status = readStatus(latest);
-    if (status && TERMINAL_STATUSES.has(status)) {
+    if (isTerminalStatus(status)) {
       return { final: latest, timedOut: false, attempts };
     }
     await sleep(Math.min(intervalMs, Math.max(0, deadline - Date.now())));
   }
 
   return { final: latest, timedOut: true, attempts };
-}
-
-function readStatus(value: unknown): string | null {
-  if (!value || typeof value !== 'object') {
-    return null;
-  }
-  const status = (value as { status?: unknown }).status;
-  return typeof status === 'string' ? status.toLowerCase() : null;
 }
 
 function finiteNumberOrDefault(value: number | undefined, fallback: number): number {
