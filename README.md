@@ -7,7 +7,7 @@ The Hog supports two MCP setup options:
 
 | Option | Best for | Authentication |
 | --- | --- | --- |
-| Hosted remote MCP | Claude web/desktop connectors and users who do not want to install Node or manage local config files | Sign in with The Hog through OAuth |
+| Hosted remote MCP | Claude.ai and hosted connector flows that accept a remote MCP URL | Sign in with The Hog through OAuth |
 | Local stdio MCP | Claude Code, Cursor, Codex, VS Code, Windsurf, and local coding agents that run a command on your machine | Pass your The Hog API key and API secret as environment variables |
 
 ## Quick Start
@@ -24,6 +24,16 @@ Remote MCP uses OAuth. You do not need to create or paste an API key. Your MCP
 client opens a browser sign-in flow, you sign in with The Hog, and the connector
 is associated with the organization you select. Remote connections can be
 revoked from the Remote MCP page in the dashboard.
+
+For Claude, open Settings, go to Connectors, choose Add custom connector, and
+enter:
+
+```text
+Name: The Hog
+URL: https://mcp.thehog.ai/mcp
+```
+
+After saving, click Connect and finish the browser OAuth flow.
 
 ### Local stdio MCP
 
@@ -55,9 +65,10 @@ variables instead of writing keys directly into a config file.
 
 ### Claude Desktop
 
-For Claude web or hosted Claude connectors, use `https://mcp.thehog.ai/mcp`.
-Use this local stdio setup when Claude Desktop is running MCP commands on your
-machine. Claude Desktop uses a local JSON config file for MCP servers.
+For Claude.ai or other hosted connector flows, use the Hosted remote MCP Quick
+Start above. Use this local stdio setup only when Claude Desktop is running MCP
+commands on your machine. Claude Desktop uses a local JSON config file for MCP
+servers.
 
 Config locations:
 
