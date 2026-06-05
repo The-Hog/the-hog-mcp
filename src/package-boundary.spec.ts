@@ -71,6 +71,12 @@ test('package executable is separated from importable library entrypoint', async
   });
 });
 
+test('production build excludes development eval artifacts', async () => {
+  await assert.rejects(() => stat(join(ROOT, 'dist', 'evals')), {
+    code: 'ENOENT',
+  });
+});
+
 async function publicTextFiles(): Promise<string[]> {
   const files: string[] = [];
   for (const entry of PUBLIC_REPO_ENTRIES) {

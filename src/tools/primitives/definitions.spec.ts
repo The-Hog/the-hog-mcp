@@ -19,7 +19,7 @@ test('delete monitor requires confirmation', async () => {
   );
 });
 
-test('async primitive tools strip MCP controls, set idempotency, and poll by default', async () => {
+test('async primitive tools strip MCP controls, set idempotency, and poll when requested', async () => {
   const tool = primitiveTools.find((candidate) => candidate.name === 'search_companies');
   assert.ok(tool);
 
@@ -34,6 +34,7 @@ test('async primitive tools strip MCP controls, set idempotency, and poll by def
       query: 'AI infrastructure companies',
       limit: 5,
       timeoutSeconds: 5,
+      waitForResult: true,
       idempotencyKey: 'idem_123',
     },
     {
@@ -173,6 +174,101 @@ test('configured async primitive tools return direct responses when no async ID 
   });
 });
 
+test('async primitive tools return a top-level continuation on forced timeout', async () => {
+  const tool = primitiveTools.find((candidate) => candidate.name === 'search_people');
+  assert.ok(tool);
+
+  const result = await tool.execute(
+    {
+      query: 'Global Mobility Manager at Walmart',
+      waitForResult: true,
+      timeoutSeconds: 1,
+    },
+    {
+      request: async (request: { method: string; path: string }) => {
+        if (request.method === 'POST') {
+          return {
+            data: { operationId: 'op_people', status: 'queued' },
+            status: 202,
+            requestId: 'req_start',
+          };
+        }
+        return {
+          data: { id: 'op_people', status: 'running' },
+          status: 200,
+          requestId: 'req_poll',
+        };
+      },
+      createIdempotencyKey: () => {
+        throw new Error('random idempotency keys should not be used');
+      },
+    } as never,
+  );
+
+  assert.deepEqual(result, {
+    status: 'still_running',
+    still_running: true,
+    operationId: 'op_people',
+    nextTool: 'get_operation',
+    nextInput: { id: 'op_people' },
+    pollAfterSeconds: 2,
+    message: 'The request is still running. Use get_operation with this ID to continue.',
+    requestId: 'req_start',
+  });
+});
+
+test('async primitive idempotency keys are stable when omitted', async () => {
+  const tool = primitiveTools.find((candidate) => candidate.name === 'search_companies');
+  assert.ok(tool);
+
+  const idempotencyKeys: string[] = [];
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    await tool.execute(
+      {
+        query: 'AI infrastructure companies',
+        limit: 5,
+        waitForResult: false,
+      },
+      {
+        request: async (request: { idempotencyKey?: string }) => {
+          idempotencyKeys.push(request.idempotencyKey ?? '');
+          return {
+            data: { operationId: `op_${attempt}`, status: 'queued' },
+            status: 202,
+            requestId: 'req_start',
+          };
+        },
+        createIdempotencyKey: () => {
+          throw new Error('random idempotency keys should not be used');
+        },
+      } as never,
+    );
+  }
+
+  assert.equal(idempotencyKeys.length, 2);
+  assert.equal(idempotencyKeys[0], idempotencyKeys[1]);
+  assert.match(idempotencyKeys[0] ?? '', /^search_companies_[a-f0-9]{32}$/);
+});
+
+test('scrape_web_pages requires at least one url or item', async () => {
+  const tool = primitiveTools.find((candidate) => candidate.name === 'scrape_web_pages');
+  assert.ok(tool);
+
+  await assert.rejects(
+    () =>
+      tool.execute(
+        {},
+        {
+          request: async () => {
+            throw new Error('request should not be sent');
+          },
+          createIdempotencyKey: () => 'generated_scrape_web_pages',
+        } as never,
+      ),
+    /requires at least one url or item/,
+  );
+});
+
 test('mutating primitive tools expose idempotency and risk annotations', async () => {
   const sampleInputs: Record<string, Record<string, unknown>> = {
     search_companies: { query: 'security companies' },
@@ -190,6 +286,24 @@ test('mutating primitive tools expose idempotency and risk annotations', async (
     search_web: { query: 'the hog api' },
     crawl_website: { url: 'https://example.com' },
     scrape_web_page: { url: 'https://example.com' },
+    scrape_web_pages: { urls: ['https://example.com'] },
+    detect_image_deepfake: { url: 'https://example.com/image.jpg' },
+    get_facebook_page: { url: 'https://www.facebook.com/openai' },
+    get_facebook_post: { url: 'https://www.facebook.com/openai/posts/123' },
+    get_linkedin_company: { identifier: 'openai' },
+    list_linkedin_company_posts: { companySlug: 'openai' },
+    find_linkedin_companies: { domains: ['openai.com'] },
+    search_linkedin_posts: { keyword: 'ai' },
+    list_linkedin_post_comments: {
+      postUrls: ['https://www.linkedin.com/feed/update/urn:li:activity:123'],
+    },
+    list_linkedin_post_reactions: {
+      postUrls: ['https://www.linkedin.com/feed/update/urn:li:activity:123'],
+    },
+    get_linkedin_profile: { username: 'example' },
+    list_linkedin_profile_posts: { username: 'example' },
+    list_linkedin_profile_comments: { profiles: ['example'] },
+    list_linkedin_profile_reactions: { profiles: ['example'] },
     get_instagram_profile: { username: 'example' },
     list_instagram_posts: { username: 'example' },
     get_instagram_post: { postUrl: 'https://www.instagram.com/p/example/' },
@@ -199,20 +313,12 @@ test('mutating primitive tools expose idempotency and risk annotations', async (
     list_instagram_followers: { username: 'example' },
     list_instagram_following: { username: 'example' },
     get_tiktok_profile: { username: 'example' },
-    find_linkedin_companies: { domains: ['https://example.com'] },
-    get_linkedin_company: { identifier: 'example-company' },
-    list_linkedin_company_posts: { companySlug: 'example-company' },
-    search_linkedin_posts: { keyword: 'b2b saas' },
-    get_linkedin_profile: { username: 'example-profile' },
-    list_linkedin_profile_posts: { username: 'example-profile' },
-    list_linkedin_post_comments: {
-      postUrls: ['https://www.linkedin.com/feed/update/urn:li:activity:123'],
-    },
-    list_linkedin_post_reactions: {
-      postUrls: ['https://www.linkedin.com/feed/update/urn:li:activity:123'],
-    },
-    list_linkedin_profile_comments: { profiles: ['example-profile'] },
-    list_linkedin_profile_reactions: { profiles: ['example-profile'] },
+    get_x_profile: { username: 'example' },
+    get_x_post: { postUrl: 'https://x.com/example/status/123' },
+    get_x_conversation: { postId: '123' },
+    search_x_posts: { query: 'the hog' },
+    get_youtube_channel: { url: 'https://www.youtube.com/@OpenAI' },
+    get_youtube_video: { url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' },
     create_monitor: {
       name: 'Site monitor',
       type: 'site_search',
@@ -265,6 +371,15 @@ test('mutating primitive tools expose idempotency and risk annotations', async (
       `${tool.name} strips idempotencyKey from body`,
     );
   }
+});
+
+test('detect_image_deepfake exposes only URL input and hides provider identity', () => {
+  const tool = primitiveTools.find(
+    (candidate) => candidate.name === 'detect_image_deepfake',
+  );
+  assert.ok(tool);
+  assert.deepEqual(Object.keys(tool.inputSchema).sort(), ['idempotencyKey', 'url']);
+  assert.doesNotMatch(tool.description, /sightengine|provider|model/i);
 });
 
 test('read-only and destructive primitive tools expose risk annotations', () => {
@@ -362,7 +477,7 @@ test('submit_search accepts non-query criteria and strips MCP controls', async (
   assert.equal(requests.length, 1);
 });
 
-test('enrichment polling uses the enrichment ID from queued responses by default', async () => {
+test('enrichment polling uses the enrichment ID from queued responses when requested', async () => {
   const tool = primitiveTools.find((candidate) => candidate.name === 'enrich_contacts');
   assert.ok(tool);
 
@@ -371,6 +486,7 @@ test('enrichment polling uses the enrichment ID from queued responses by default
     {
       identifiers: [{ linkedin_url: 'https://www.linkedin.com/in/example' }],
       fields: ['contact.email'],
+      waitForResult: true,
       timeoutSeconds: 5,
     },
     {
@@ -400,7 +516,7 @@ test('enrichment polling uses the enrichment ID from queued responses by default
   assert.deepEqual(paths, ['/api/enrichments', '/api/enrichments/enrich_123']);
 });
 
-test('async primitive tools poll the correct status endpoint by default', async () => {
+test('async primitive tools poll the correct status endpoint when requested', async () => {
   const cases: Array<{
     name: string;
     input: Record<string, unknown>;
@@ -456,7 +572,7 @@ test('async primitive tools poll the correct status endpoint by default', async 
 
     const requests: Array<{ method: string; path: string; timeoutMs?: number }> = [];
     await tool.execute(
-      { ...item.input, timeoutSeconds: 5 },
+      { ...item.input, waitForResult: true, timeoutSeconds: 5 },
       {
         request: async (request: { method: string; path: string; timeoutMs?: number }) => {
           requests.push(request);
@@ -479,7 +595,7 @@ test('async primitive tools poll the correct status endpoint by default', async 
   }
 });
 
-test('async primitive tools return queued responses when polling is explicitly disabled', async () => {
+test('async primitive tools return a continuation when polling is disabled', async () => {
   const tool = primitiveTools.find((candidate) => candidate.name === 'search_people');
   assert.ok(tool);
 
@@ -504,7 +620,13 @@ test('async primitive tools return queued responses when polling is explicitly d
     [{ method: 'POST', path: '/api/v1/people/search' }],
   );
   assert.deepEqual(result, {
-    response: { operationId: 'op_people', status: 'queued' },
+    status: 'still_running',
+    still_running: true,
+    operationId: 'op_people',
+    nextTool: 'get_operation',
+    nextInput: { id: 'op_people' },
+    pollAfterSeconds: 10,
+    message: 'The request is still running. Use get_operation with this ID to continue.',
     requestId: 'req_people',
   });
 });
@@ -515,7 +637,7 @@ test('configured async primitive tools poll operation IDs even without an initia
 
   const requests: Array<{ method: string; path: string }> = [];
   await tool.execute(
-    { query: 'security engineers' },
+    { query: 'security engineers', waitForResult: true },
     {
       request: async (request: { method: string; path: string }) => {
         requests.push(request);
@@ -558,7 +680,7 @@ test('primitive tools infer operation polling from queued operationId responses'
 
   const requests: Array<{ method: string; path: string }> = [];
   const result = await tool.execute(
-    {},
+    { waitForResult: true },
     {
       request: async (request: { method: string; path: string }) => {
         requests.push(request);
@@ -608,7 +730,7 @@ test('primitive tools infer operation polling from nested queued operation respo
 
   const requests: Array<{ method: string; path: string }> = [];
   await tool.execute(
-    {},
+    { waitForResult: true },
     {
       request: async (request: { method: string; path: string }) => {
         requests.push(request);

@@ -74,7 +74,7 @@ test('package metadata is safe to publish publicly', () => {
   );
   assert.equal(
     packageJson.scripts?.test,
-    'npm run build && tsc -p tsconfig.spec.json && node scripts/run-tests.mjs',
+    'npm run build && rm -rf dist-test && tsc -p tsconfig.spec.json && node scripts/run-tests.mjs',
   );
   assert.equal(
     packageJson.scripts?.['pack:dry-run'],

@@ -10,6 +10,7 @@ import type { ToolInput } from '../types.js';
 import { workflowToolAnnotations, type WorkflowToolDefinition } from './types.js';
 import {
   clampInt,
+  continuationForStep,
   createWorkflowContext,
   extractItems,
   pollFields,
@@ -31,7 +32,9 @@ const contactFieldsSchema = z
 const targetAccountFields = {
   companyDomains: z.array(z.string().min(1)).max(100).optional(),
   companyNames: z.array(z.string().min(1)).max(100).optional(),
+  companyLinkedInUrls: z.array(z.string().min(1)).max(100).optional(),
   titles: z.array(z.string().min(1)).max(50).optional(),
+  titleMatch: z.enum(['exact', 'similar']).optional(),
   locations: z.array(z.string().min(1)).max(50).optional(),
   limit: z.number().int().min(1).max(100).optional(),
   includeContactInfo: z.boolean().optional(),
@@ -115,17 +118,9 @@ async function buildProspectList(input: ToolInput, client: TheHogToolClient) {
       summary: { companyCount: 0, peopleCount: 0, enrichmentCount: 0 },
     };
   }
-  if (companyStep.asyncId && input.waitForResult === false) {
-    ctx.warnings.push({
-      step: 'search_people',
-      message:
-        'Company search was queued and waitForResult is false, so downstream prospect discovery was not started.',
-    });
-    return {
-      ...workflowSummary(ctx, 1),
-      steps: { companySearch: { ...pollMetadata(companyStep), final: companyStep.final } },
-      summary: { companyCount: 0, peopleCount: 0, enrichmentCount: 0 },
-    };
+  const companyContinuation = continuationForStep(companyStep, 'operation');
+  if (companyContinuation) {
+    return companyContinuation;
   }
   const companies = extractItems(companyStep, ['companies', 'data']);
   if (companies.length === 0) {
@@ -174,12 +169,20 @@ async function buildProspectList(input: ToolInput, client: TheHogToolClient) {
     poll: 'operation',
     ...pollFields(input),
   });
+  const peopleContinuation = continuationForStep(peopleStep, 'operation');
+  if (peopleContinuation) {
+    return peopleContinuation;
+  }
 
   const people = extractItems(peopleStep, ['people', 'data']);
   const enrichmentStep =
     input.includeContactInfo === true
       ? await enrichPeopleFromItems(client, ctx, input, people, 'build_prospect_list')
       : null;
+  const enrichmentContinuation = continuationForStep(enrichmentStep, 'enrichment');
+  if (enrichmentContinuation) {
+    return enrichmentContinuation;
+  }
 
   return {
     ...workflowSummary(ctx, [companyStep, peopleStep, enrichmentStep].filter(Boolean).length),
@@ -202,11 +205,16 @@ async function findPeopleAtTargetAccounts(input: ToolInput, client: TheHogToolCl
   const ctx = createWorkflowContext('find_people_at_target_accounts');
   const domains = uniqueStrings(readStringArray(input.companyDomains));
   const names = uniqueStrings(readStringArray(input.companyNames));
-  if (domains.length === 0 && names.length === 0) {
-    throw new Error('Provide at least one company domain or company name.');
+  const linkedinUrls = uniqueStrings(readStringArray(input.companyLinkedInUrls));
+  if (domains.length === 0 && names.length === 0 && linkedinUrls.length === 0) {
+    throw new Error('Provide at least one company domain, company name, or company LinkedIn URL.');
   }
 
   const titles = readStringArray(input.titles);
+  const titleMatch =
+    input.titleMatch === 'exact' || input.titleMatch === 'similar'
+      ? input.titleMatch
+      : undefined;
   const locations = readStringArray(input.locations);
   const query =
     titles.length > 0
@@ -222,10 +230,12 @@ async function findPeopleAtTargetAccounts(input: ToolInput, client: TheHogToolCl
       includeContacts: input.includeContactInfo === true,
       filters: {
         ...(titles.length > 0 ? { titles } : {}),
+        ...(titleMatch ? { titleMatch } : {}),
         ...(locations.length > 0 ? { locations } : {}),
         company: {
           ...(domains.length > 0 ? { domains } : {}),
           ...(names.length > 0 ? { names } : {}),
+          ...(linkedinUrls.length > 0 ? { linkedinUrls } : {}),
         },
       },
     },
@@ -238,6 +248,10 @@ async function findPeopleAtTargetAccounts(input: ToolInput, client: TheHogToolCl
     poll: 'operation',
     ...pollFields(input),
   });
+  const peopleContinuation = continuationForStep(peopleStep, 'operation');
+  if (peopleContinuation) {
+    return peopleContinuation;
+  }
 
   const people = extractItems(peopleStep, ['people', 'data']);
   const enrichmentStep =
@@ -250,6 +264,10 @@ async function findPeopleAtTargetAccounts(input: ToolInput, client: TheHogToolCl
           'find_people_at_target_accounts',
         )
       : null;
+  const enrichmentContinuation = continuationForStep(enrichmentStep, 'enrichment');
+  if (enrichmentContinuation) {
+    return enrichmentContinuation;
+  }
 
   return {
     ...workflowSummary(ctx, [peopleStep, enrichmentStep].filter(Boolean).length),
@@ -286,6 +304,10 @@ async function enrichProspectList(input: ToolInput, client: TheHogToolClient) {
     poll: 'enrichment',
     ...pollFields(input),
   });
+  const enrichmentContinuation = continuationForStep(enrichmentStep, 'enrichment');
+  if (enrichmentContinuation) {
+    return enrichmentContinuation;
+  }
 
   return {
     ...workflowSummary(ctx, enrichmentStep ? 1 : 0),

@@ -173,6 +173,36 @@ test('request throws sanitized API error', async () => {
   );
 });
 
+test('request exposes Retry-After on 429 API errors', async () => {
+  const fetchImpl: FetchLike = async () =>
+    new Response(
+      JSON.stringify({
+        statusCode: 429,
+        message: 'Too many poll requests',
+      }),
+      { status: 429, headers: { 'x-request-id': 'req_429', 'retry-after': '2' } },
+    );
+  const client = new TheHogClient(
+    {
+      apiBaseUrl: 'https://developer.thehog.ai',
+      accessKey: ['ak', 'test-key'].join('_'),
+      secretKey: ['sk', 'test-key'].join('_'),
+    },
+    fetchImpl,
+  );
+
+  await assert.rejects(
+    () => client.request({ method: 'GET', path: '/api/operations/op_1' }),
+    (error) => {
+      assert.ok(error instanceof TheHogApiError);
+      assert.equal(error.status, 429);
+      assert.equal(error.requestId, 'req_429');
+      assert.equal(error.retryAfterMs, 2_000);
+      return true;
+    },
+  );
+});
+
 test('request redacts non-Error thrown values', async () => {
   const leakedKey = ['hog', 'live', 'non-error'].join('_');
   const fetchImpl: FetchLike = async () => {

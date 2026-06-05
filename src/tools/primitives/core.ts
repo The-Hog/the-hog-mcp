@@ -28,6 +28,14 @@ export const corePrimitiveTools: PrimitiveToolDefinition[] = [
     poll: 'operation',
   }),
   endpointTool({
+    name: 'list_operations',
+    description: 'List recent The Hog async operations visible to the current credentials.',
+    method: 'GET',
+    path: '/api/operations',
+    endpointPath: '/api/operations',
+    inputSchema: {},
+  }),
+  endpointTool({
     name: 'search_people',
     description:
       'Search people using The Hog people search API. Use this when the user wants contacts by role, seniority, company, location, or other public filters. This may consume The Hog credits. This starts an async operation and polls for the result by default; set waitForResult to false to return the operation ID.',

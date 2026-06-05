@@ -6,6 +6,7 @@ export class TheHogApiError extends Error {
     readonly status: number,
     readonly requestId: string | null,
     readonly responseBody: unknown,
+    readonly retryAfterMs: number | null = null,
   ) {
     super(message);
     this.name = 'TheHogApiError';
@@ -17,6 +18,7 @@ export class TheHogApiError extends Error {
       message: redactSecrets(this.message),
       status: this.status,
       requestId: this.requestId,
+      retryAfterMs: this.retryAfterMs,
       responseBody: redactSecrets(this.responseBody),
     };
   }

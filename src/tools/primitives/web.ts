@@ -1,7 +1,7 @@
 import { z } from 'zod/v4';
 import { idempotencyField } from '../schemas.js';
-import { endpointTool } from './endpoint-tool.js';
-import type { PrimitiveToolDefinition } from './types.js';
+import { endpointTool, omitControlFields } from './endpoint-tool.js';
+import type { PrimitiveToolDefinition, ToolInput } from './types.js';
 
 export const webPrimitiveTools: PrimitiveToolDefinition[] = [
   endpointTool({
@@ -57,4 +57,48 @@ export const webPrimitiveTools: PrimitiveToolDefinition[] = [
     idempotent: true,
     openWorld: true,
   }),
+  endpointTool({
+    name: 'scrape_web_pages',
+    description:
+      'Scrape multiple web pages in one bounded batch. Use this when the user needs readable content from several URLs. This may consume The Hog credits.',
+    method: 'POST',
+    path: '/api/v1/platform/scrapers/web/scrape/batch',
+    endpointPath: '/api/v1/platform/scrapers/web/scrape/batch',
+    inputSchema: {
+      urls: z.array(z.string().min(1)).optional(),
+      items: z.array(z.record(z.string(), z.unknown())).optional(),
+      renderJs: z.boolean().optional(),
+      maxAgeMs: z.number().int().min(0).max(30 * 24 * 60 * 60 * 1000).optional(),
+      maxAgeDays: z.number().int().min(0).max(30).optional(),
+      maxConcurrency: z.number().int().min(1).max(10).optional(),
+      ...idempotencyField,
+    },
+    body: scrapeWebPagesBody,
+    idempotent: true,
+    openWorld: true,
+  }),
+  endpointTool({
+    name: 'detect_image_deepfake',
+    description:
+      'Analyze a public image URL for generated or manipulated-image signals. This may consume The Hog credits.',
+    method: 'POST',
+    path: '/api/v1/platform/scrapers/image/deepfake-detection',
+    endpointPath: '/api/v1/platform/scrapers/image/deepfake-detection',
+    inputSchema: {
+      url: z.string().min(1).max(4096),
+      ...idempotencyField,
+    },
+    idempotent: true,
+    openWorld: true,
+  }),
 ];
+
+function scrapeWebPagesBody(input: ToolInput): Record<string, unknown> {
+  const body = omitControlFields(input);
+  const urls = Array.isArray(body.urls) ? body.urls : [];
+  const items = Array.isArray(body.items) ? body.items : [];
+  if (urls.length === 0 && items.length === 0) {
+    throw new Error('scrape_web_pages requires at least one url or item.');
+  }
+  return body;
+}
