@@ -1,18 +1,19 @@
 import { normalizeError } from '../../client/errors.js';
-import {
-  pollEnrichment,
-  pollOperation,
-} from '../../client/polling.js';
+import { pollEnrichment, pollOperation } from '../../client/polling.js';
+import { stableIdempotencyKey } from '../../client/idempotency.js';
 import type {
   HttpMethod,
   TheHogRequest,
   TheHogToolClient,
 } from '../../client/thehog-client.js';
 import { readAsyncId } from '../primitives/endpoint-tool.js';
+import { asyncContinuation } from '../async-continuation.js';
 import type { ToolInput } from '../types.js';
 import type { WorkflowContext, WorkflowStepResult } from './types.js';
 
 export type WorkflowPollKind = 'operation' | 'enrichment';
+
+const DEEP_RESEARCH_MAX_INLINE_WAIT_SECONDS = 50;
 
 export interface WorkflowRequestOptions {
   step: string;
@@ -77,8 +78,10 @@ export async function requestWorkflowStep(
       final: pollResult.final,
       requestId: response.requestId,
       asyncId,
+      pollCompleted: !pollResult.timedOut,
       timedOut: pollResult.timedOut,
       pollAttempts: pollResult.attempts,
+      nextPollAfterMs: pollResult.nextPollAfterMs,
     };
   }
 
@@ -87,6 +90,7 @@ export async function requestWorkflowStep(
     final: response.data,
     requestId: response.requestId,
     asyncId,
+    pollCompleted: false,
   };
 }
 
@@ -135,7 +139,27 @@ export function workflowIdempotencyKey(
     const clean = input.idempotencyKey.trim();
     return `${clean.slice(0, Math.max(1, 256 - suffix.length))}${suffix}`;
   }
-  return client.createIdempotencyKey(`${workflowName}_${step}`);
+  void client;
+  return stableIdempotencyKey(`${workflowName}_${step}`, {
+    workflow: workflowName,
+    step,
+    input: omitWorkflowControlFields(input),
+  });
+}
+
+export function omitWorkflowControlFields(input: ToolInput): Record<string, unknown> {
+  const output: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(input)) {
+    if (
+      key === 'waitForResult' ||
+      key === 'timeoutSeconds' ||
+      key === 'idempotencyKey'
+    ) {
+      continue;
+    }
+    output[key] = value;
+  }
+  return output;
 }
 
 export function extractItems(value: unknown, preferredKeys: string[] = []): unknown[] {
@@ -248,6 +272,31 @@ export function pollFields(input: ToolInput): Pick<
   };
 }
 
+export function deepResearchPollFields(input: ToolInput): Pick<
+  WorkflowRequestOptions,
+  'waitForResult' | 'timeoutSeconds'
+> {
+  if (input.waitForResult !== true) {
+    return { waitForResult: false };
+  }
+  const requested = timeoutSeconds(input) ?? DEEP_RESEARCH_MAX_INLINE_WAIT_SECONDS;
+  return {
+    waitForResult: true,
+    timeoutSeconds: Math.min(requested, DEEP_RESEARCH_MAX_INLINE_WAIT_SECONDS),
+  };
+}
+
+export function enrichmentPollFields(input: ToolInput): Pick<
+  WorkflowRequestOptions,
+  'waitForResult' | 'timeoutSeconds'
+> {
+  const requested = timeoutSeconds(input) ?? DEEP_RESEARCH_MAX_INLINE_WAIT_SECONDS;
+  return {
+    waitForResult: true,
+    timeoutSeconds: Math.min(requested, DEEP_RESEARCH_MAX_INLINE_WAIT_SECONDS),
+  };
+}
+
 export function pollMetadata(step: WorkflowStepResult | null): {
   timedOut?: boolean;
   pollAttempts?: number;
@@ -258,6 +307,39 @@ export function pollMetadata(step: WorkflowStepResult | null): {
     ...(step?.timedOut !== undefined ? { timedOut: step.timedOut } : {}),
     ...(step?.pollAttempts !== undefined ? { pollAttempts: step.pollAttempts } : {}),
   };
+}
+
+export function continuationForStep(
+  step: WorkflowStepResult | null,
+  pollKind: WorkflowPollKind,
+): Record<string, unknown> | null {
+  if (!step?.asyncId) return null;
+  if (step.timedOut !== true && step.pollCompleted) return null;
+  if (step.timedOut !== true && isTerminalStepStatus(step.final)) return null;
+  return asyncContinuation({
+    kind: pollKind,
+    id: step.asyncId,
+    requestId: step.requestId,
+    pollAfterMs: step.nextPollAfterMs,
+  });
+}
+
+function isTerminalStepStatus(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  const status = value.status;
+  return (
+    typeof status === 'string' &&
+    [
+      'succeeded',
+      'completed',
+      'complete',
+      'failed',
+      'error',
+      'cancelled',
+      'canceled',
+      'partial_success',
+    ].includes(status.toLowerCase())
+  );
 }
 
 function unwrapKnownContainers(value: unknown): unknown[] {

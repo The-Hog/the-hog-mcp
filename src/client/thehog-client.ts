@@ -79,11 +79,18 @@ export class TheHogClient implements TheHogToolClient {
         response.status,
         requestId,
         payload,
+        retryAfterMs(response.headers.get('retry-after')),
       );
     }
     if (!response.ok) {
       const message = errorMessageForResponse(response.status, payload);
-      throw new TheHogApiError(message, response.status, requestId, payload);
+      throw new TheHogApiError(
+        message,
+        response.status,
+        requestId,
+        payload,
+        retryAfterMs(response.headers.get('retry-after')),
+      );
     }
 
     return {
@@ -174,4 +181,15 @@ function errorMessageForResponse(status: number, body: unknown): string {
     }
   }
   return `The Hog API request failed with HTTP ${status}`;
+}
+
+function retryAfterMs(value: string | null): number | null {
+  if (!value) return null;
+  const seconds = Number(value);
+  if (Number.isFinite(seconds) && seconds >= 0) {
+    return Math.ceil(seconds * 1_000);
+  }
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) return null;
+  return Math.max(0, timestamp - Date.now());
 }

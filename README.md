@@ -7,7 +7,7 @@ The Hog supports two MCP setup options:
 
 | Option | Best for | Authentication |
 | --- | --- | --- |
-| Hosted remote MCP | Claude.ai and hosted connector flows that accept a remote MCP URL | Sign in with The Hog through OAuth |
+| Hosted remote MCP | Claude web/desktop connectors and users who do not want to install Node or manage local config files | Sign in with The Hog through OAuth |
 | Local stdio MCP | Claude Code, Cursor, Codex, VS Code, Windsurf, and local coding agents that run a command on your machine | Pass your The Hog API key and API secret as environment variables |
 
 ## Quick Start
@@ -65,10 +65,9 @@ variables instead of writing keys directly into a config file.
 
 ### Claude Desktop
 
-For Claude.ai or other hosted connector flows, use the Hosted remote MCP Quick
-Start above. Use this local stdio setup only when Claude Desktop is running MCP
-commands on your machine. Claude Desktop uses a local JSON config file for MCP
-servers.
+For Claude web or hosted Claude connectors, use `https://mcp.thehog.ai/mcp`.
+Use this local stdio setup when Claude Desktop is running MCP commands on your
+machine. Claude Desktop uses a local JSON config file for MCP servers.
 
 Config locations:
 
@@ -255,6 +254,15 @@ registerToolDefinitions(server, [...primitiveTools, ...workflowTools], {
 tool call with `getClient(context)` so credentials stay scoped to the active MCP
 request. Local single-user stdio integrations can return the same client each
 time.
+
+## Long-Running Tools
+
+Search, enrichment, deep research, extraction, and monitor-run tools may start
+async work. When the work is still running, tools return a top-level
+`status: "still_running"` payload with a durable ID, `nextTool`, `nextInput`,
+`pollAfterSeconds`, and a short message. Use the returned `nextTool` and
+`nextInput` to resume. Do not re-run the starter call unless you intend to start
+new work.
 
 ## Security
 

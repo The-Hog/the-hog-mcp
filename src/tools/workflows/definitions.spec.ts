@@ -37,6 +37,21 @@ test('workflow tool schemas expose only curated public inputs', () => {
     'timeoutSeconds',
     'waitForResult',
   ]);
+  assert.deepEqual(schemaKeys.find_people_at_target_accounts, [
+    'companyDomains',
+    'companyLinkedInUrls',
+    'companyNames',
+    'contactFields',
+    'idempotencyKey',
+    'includeContactInfo',
+    'limit',
+    'locations',
+    'signals_config',
+    'timeoutSeconds',
+    'titleMatch',
+    'titles',
+    'waitForResult',
+  ]);
   assert.deepEqual(schemaKeys.research_company, [
     'companyName',
     'domain',
@@ -356,7 +371,140 @@ test('target account workflow requires at least one account selector', async () 
           throw new Error('should not be called');
         }),
       ),
-    /company domain or company name/,
+    /company domain, company name, or company LinkedIn URL/,
+  );
+});
+
+test('find people at target accounts forwards title mode and LinkedIn company selectors', async () => {
+  const tool = workflowTools.find(
+    (candidate) => candidate.name === 'find_people_at_target_accounts',
+  );
+  assert.ok(tool);
+
+  const requests: Array<{ method: string; path: string; body?: unknown }> = [];
+  await tool.execute(
+    {
+      companyLinkedInUrls: ['https://www.linkedin.com/company/walmart'],
+      titles: ['Global Mobility', 'Immigration'],
+      titleMatch: 'similar',
+      locations: ['United States'],
+      limit: 3,
+      timeoutSeconds: 5,
+    },
+    fakeClient(async (request) => {
+      requests.push(request);
+      if (request.method === 'POST' && request.path === '/api/v1/people/search') {
+        return {
+          data: { operationId: 'op_people', status: 'queued' },
+          status: 202,
+          requestId: 'req_people',
+        };
+      }
+      if (request.path === '/api/operations/op_people') {
+        return {
+          data: { id: 'op_people', status: 'succeeded', result: { data: [] } },
+          status: 200,
+          requestId: 'req_people_poll',
+        };
+      }
+      throw new Error(`Unexpected request ${request.method} ${request.path}`);
+    }),
+  );
+
+  assert.deepEqual(requests[0]?.body, {
+    query: 'Global Mobility OR Immigration at target accounts',
+    limit: 3,
+    includeContacts: false,
+    filters: {
+      titles: ['Global Mobility', 'Immigration'],
+      titleMatch: 'similar',
+      locations: ['United States'],
+      company: {
+        linkedinUrls: ['https://www.linkedin.com/company/walmart'],
+      },
+    },
+  });
+});
+
+test('find people at target accounts returns a resume handoff on forced timeout', async () => {
+  const tool = workflowTools.find(
+    (candidate) => candidate.name === 'find_people_at_target_accounts',
+  );
+  assert.ok(tool);
+
+  const result = await tool.execute(
+    {
+      companyNames: ['Walmart'],
+      titles: ['Global Mobility Manager'],
+      waitForResult: true,
+      timeoutSeconds: 1,
+    },
+    fakeClient(async (request) => {
+      if (request.method === 'POST' && request.path === '/api/v1/people/search') {
+        return {
+          data: { operationId: 'op_people', status: 'queued' },
+          status: 202,
+          requestId: 'req_people',
+        };
+      }
+      if (request.path === '/api/operations/op_people') {
+        return {
+          data: { id: 'op_people', status: 'running' },
+          status: 200,
+          requestId: 'req_people_poll',
+        };
+      }
+      throw new Error(`Unexpected request ${request.method} ${request.path}`);
+    }),
+  );
+
+  assert.deepEqual(result, {
+    status: 'still_running',
+    still_running: true,
+    operationId: 'op_people',
+    nextTool: 'get_operation',
+    nextInput: { id: 'op_people' },
+    pollAfterSeconds: 2,
+    message: 'The request is still running. Use get_operation with this ID to continue.',
+    requestId: 'req_people',
+  });
+});
+
+test('workflow sub-step idempotency keys are stable when omitted', async () => {
+  const tool = workflowTools.find(
+    (candidate) => candidate.name === 'find_people_at_target_accounts',
+  );
+  assert.ok(tool);
+
+  const idempotencyKeys: string[] = [];
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    await tool.execute(
+      {
+        companyNames: ['Walmart'],
+        titles: ['Global Mobility Manager'],
+        waitForResult: false,
+      },
+      {
+        request: async (request: FakeRequest) => {
+          idempotencyKeys.push(request.idempotencyKey ?? '');
+          return {
+            data: { operationId: `op_people_${attempt}`, status: 'queued' },
+            status: 202,
+            requestId: 'req_people',
+          };
+        },
+        createIdempotencyKey: () => {
+          throw new Error('random idempotency keys should not be used');
+        },
+      } as never,
+    );
+  }
+
+  assert.equal(idempotencyKeys.length, 2);
+  assert.equal(idempotencyKeys[0], idempotencyKeys[1]);
+  assert.match(
+    idempotencyKeys[0] ?? '',
+    /^find_people_at_target_accounts_people_[a-f0-9]{32}$/,
   );
 });
 
@@ -415,9 +563,10 @@ test('scrape and extract only starts deep research when extraction is requested'
   assert.deepEqual(extractionRequests, [
     '/api/v1/platform/scrapers/web/scrape',
     '/api/deep-research',
-    '/api/operations/op_extract',
   ]);
-  assert.equal((result as { summary: { extracted: boolean } }).summary.extracted, true);
+  assert.equal((result as { status: string }).status, 'still_running');
+  assert.equal((result as { operationId: string }).operationId, 'op_extract');
+  assert.equal((result as { nextTool: string }).nextTool, 'get_operation');
 });
 
 test('monitor topic validates source-specific fields before creating monitors', async () => {
@@ -528,11 +677,71 @@ test('monitor topic sends valid site config and source-specific cadence floors',
   });
 });
 
+test('monitor topic still creates later sources when an earlier run returns a continuation', async () => {
+  const tool = workflowTools.find((candidate) => candidate.name === 'monitor_topic');
+  assert.ok(tool);
+
+  const requests: Array<{ method: string; path: string; body?: unknown }> = [];
+  const result = await tool.execute(
+    {
+      name: 'Topic monitor',
+      topic: 'new launch',
+      sources: ['site_search', 'web_search'],
+      site: 'example.com',
+      runNow: true,
+      waitForResult: false,
+    },
+    fakeClient(async (request) => {
+      requests.push(request);
+      if (request.method === 'POST' && request.path === '/api/v1/monitors') {
+        const type = (request.body as { type?: string }).type;
+        return {
+          data: { id: type === 'site_search' ? 'mon_site' : 'mon_web' },
+          status: 201,
+          requestId: `req_create_${type}`,
+        };
+      }
+      if (
+        request.method === 'POST' &&
+        request.path === '/api/v1/monitors/mon_site/run-now'
+      ) {
+        return {
+          data: { operationId: 'op_site_run', status: 'queued' },
+          status: 202,
+          requestId: 'req_run_site',
+        };
+      }
+      if (
+        request.method === 'POST' &&
+        request.path === '/api/v1/monitors/mon_web/run-now'
+      ) {
+        return {
+          data: { operationId: 'op_web_run', status: 'queued' },
+          status: 202,
+          requestId: 'req_run_web',
+        };
+      }
+      throw new Error(`Unexpected request ${request.method} ${request.path}`);
+    }),
+  );
+
+  assert.deepEqual(
+    requests
+      .filter((request) => request.method === 'POST' && request.path === '/api/v1/monitors')
+      .map((request) => (request.body as { type?: string }).type),
+    ['site_search', 'web_search'],
+  );
+  assert.equal((result as { status: string }).status, 'still_running');
+  assert.equal((result as { operationId: string }).operationId, 'op_site_run');
+  assert.equal((result as { summary: { monitorCount: number } }).summary.monitorCount, 2);
+});
+
 type FakeRequest = {
   method: string;
   path: string;
   body?: unknown;
   query?: Record<string, unknown>;
+  idempotencyKey?: string;
 };
 
 function fakeClient(

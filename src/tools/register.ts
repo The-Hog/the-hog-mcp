@@ -40,7 +40,11 @@ export function registerToolDefinitions(
           if (isFailedWorkflowResult(payload)) {
             return jsonErrorResult({ ...payload, ok: false, tool: tool.name });
           }
-          return jsonResult({ ...payload, ok: true, tool: tool.name });
+          return jsonResult({
+            ...payload,
+            ok: typeof payload.ok === 'boolean' ? payload.ok : true,
+            tool: tool.name,
+          });
         } catch (error) {
           return errorResult(error);
         }

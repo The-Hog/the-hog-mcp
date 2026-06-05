@@ -1,6 +1,6 @@
 {
   "name": "@thehog/mcp",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "MCP server for The Hog API",
   "homepage": "https://docs.thehog.ai/guides/use-mcp",
   "bugs": {
@@ -36,8 +36,11 @@
     "package.json"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "test": "npm run build && tsc -p tsconfig.spec.json && node scripts/run-tests.mjs",
+    "build": "rm -rf dist && tsc -p tsconfig.json",
+    "test": "npm run build && rm -rf dist-test && tsc -p tsconfig.spec.json && node scripts/run-tests.mjs",
+    "test:live:mcp-grid": "RUN_LIVE_THEHOG_MCP_E2E=true sh -c 'tsc -p tsconfig.spec.json && node --test \"dist-test/live/**/*.live.spec.js\"'",
+    "eval:mcp-tool-selection": "sh -c 'tsc -p tsconfig.spec.json && node --test \"dist-test/evals/tool-selection.eval.js\"'",
+    "eval:mcp-semantics": "sh -c 'tsc -p tsconfig.spec.json && node --test \"dist-test/evals/semantic-result.eval.js\"'",
     "test:openapi": "tsc -p tsconfig.spec.json && THEHOG_RUN_OPENAPI_DRIFT=1 node --test \"dist-test/tools/primitives/openapi-drift.spec.js\"",
     "release:check": "npm test && npm run test:openapi && npm run pack:dry-run",
     "prepack": "npm test && npm run build",

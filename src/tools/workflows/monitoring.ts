@@ -9,6 +9,7 @@ import type { ToolInput } from '../types.js';
 import { workflowToolAnnotations, type WorkflowToolDefinition } from './types.js';
 import {
   clampInt,
+  continuationForStep,
   createWorkflowContext,
   pollMetadata,
   pollFields,
@@ -48,6 +49,7 @@ async function monitorTopic(input: ToolInput, client: TheHogToolClient) {
   const created: unknown[] = [];
   const runs: unknown[] = [];
   const events: unknown[] = [];
+  let pendingContinuation: Record<string, unknown> | null = null;
 
   for (const source of sources) {
     const createStep = await runWorkflowStep(client, ctx, {
@@ -101,8 +103,15 @@ async function monitorTopic(input: ToolInput, client: TheHogToolClient) {
         poll: 'operation',
         ...pollFields(input),
       });
+      const runContinuation = continuationForStep(runStep, 'operation');
+      if (runContinuation) {
+        pendingContinuation ??= runContinuation;
+      }
       if (runStep?.final) {
         runs.push({ source, ...pollMetadata(runStep), final: runStep.final });
+      }
+      if (runContinuation) {
+        continue;
       }
     }
 
@@ -119,7 +128,7 @@ async function monitorTopic(input: ToolInput, client: TheHogToolClient) {
     }
   }
 
-  return {
+  const summary = {
     ...workflowSummary(ctx, created.length),
     steps: {
       created,
@@ -131,6 +140,7 @@ async function monitorTopic(input: ToolInput, client: TheHogToolClient) {
       eventResponseCount: events.length,
     },
   };
+  return pendingContinuation ? { ...summary, ...pendingContinuation } : summary;
 }
 
 function readSources(value: unknown): string[] {

@@ -22,8 +22,10 @@ export interface WorkflowStepResult {
   final?: unknown;
   requestId: string | null;
   asyncId: string | null;
+  pollCompleted: boolean;
   timedOut?: boolean;
   pollAttempts?: number;
+  nextPollAfterMs?: number;
 }
 
 export interface WorkflowContext {

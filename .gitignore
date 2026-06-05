@@ -1,6 +1,7 @@
 dist/
 dist-test/
 node_modules/
+artifacts/
 .env*
 *.tgz
 *.tsbuildinfo

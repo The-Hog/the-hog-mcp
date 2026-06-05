@@ -10,7 +10,10 @@ import type { ToolInput } from '../types.js';
 import { workflowToolAnnotations, type WorkflowToolDefinition } from './types.js';
 import {
   compactForAnchor,
+  continuationForStep,
   createWorkflowContext,
+  deepResearchPollFields,
+  enrichmentPollFields,
   pollFields,
   pollMetadata,
   runWorkflowStep,
@@ -172,8 +175,12 @@ async function researchCompany(input: ToolInput, client: TheHogToolClient) {
       'research',
     ),
     poll: 'operation',
-    ...pollFields(input),
+    ...deepResearchPollFields(input),
   });
+  const researchContinuation = continuationForStep(researchStep, 'operation');
+  if (researchContinuation) {
+    return researchContinuation;
+  }
 
   return {
     ...workflowSummary(ctx, [crawlStep, webStep, researchStep].filter(Boolean).length),
@@ -210,9 +217,13 @@ async function researchPerson(input: ToolInput, client: TheHogToolClient) {
           'enrichment',
         ),
         poll: 'enrichment',
-        ...pollFields(input),
+        ...enrichmentPollFields(input),
       })
     : null;
+  const enrichmentContinuation = continuationForStep(enrichmentStep, 'enrichment');
+  if (enrichmentContinuation) {
+    return enrichmentContinuation;
+  }
   if (enrichmentStep?.final) {
     anchors.push({ type: 'contact_enrichment', data: compactForAnchor(enrichmentStep.final) });
   }
@@ -247,8 +258,12 @@ async function researchPerson(input: ToolInput, client: TheHogToolClient) {
     },
     idempotencyKey: workflowIdempotencyKey(client, input, 'research_person', 'research'),
     poll: 'operation',
-    ...pollFields(input),
+    ...deepResearchPollFields(input),
   });
+  const researchContinuation = continuationForStep(researchStep, 'operation');
+  if (researchContinuation) {
+    return researchContinuation;
+  }
 
   return {
     ...workflowSummary(ctx, [enrichmentStep, webStep, researchStep].filter(Boolean).length),
@@ -304,9 +319,13 @@ async function scrapeAndExtract(input: ToolInput, client: TheHogToolClient) {
             'extraction',
           ),
           poll: 'operation',
-          ...pollFields(input),
+          ...deepResearchPollFields(input),
         })
       : null;
+  const extractionContinuation = continuationForStep(extractionStep, 'operation');
+  if (extractionContinuation) {
+    return extractionContinuation;
+  }
 
   return {
     ...workflowSummary(ctx, [scrapeStep, extractionStep].filter(Boolean).length),

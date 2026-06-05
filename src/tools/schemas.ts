@@ -4,14 +4,18 @@ export const waitFields = {
   waitForResult: z
     .boolean()
     .optional()
-    .describe('Async tools poll by default; set false to return the queued operation immediately.'),
+    .describe(
+      'When true, poll until the async operation reaches a terminal state or times out. By default async tools return a continuation with the operation ID to poll later.',
+    ),
   timeoutSeconds: z
     .number()
     .int()
     .min(1)
     .max(600)
     .optional()
-    .describe('Maximum time to poll while waiting for an async result.'),
+    .describe(
+      'Maximum time to poll when waitForResult is true. Polling backs off on 429 Retry-After responses.',
+    ),
 };
 
 export const idempotencyField = {
