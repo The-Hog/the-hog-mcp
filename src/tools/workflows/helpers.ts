@@ -104,24 +104,29 @@ export async function runWorkflowStep(
   try {
     const result = await requestWorkflowStep(client, ctx, options);
     if (result.timedOut) {
+      const asyncId = result.asyncId;
       const resumeTool =
         options.poll === 'enrichment' ? 'get_enrichment' : 'get_operation';
+      if (!asyncId) {
+        ctx.warnings.push({
+          step: options.step,
+          message:
+            'Timed out while waiting for this step, but it is still processing on the server.',
+        });
+        return result;
+      }
+
       ctx.warnings.push({
         step: options.step,
-        message: result.asyncId
-          ? `Timed out while waiting for this step, but it is still processing on the server. ` +
-            `Re-attach by calling the ${resumeTool} tool with async ID "${result.asyncId}" to fetch ` +
-            `the result once it is ready; re-attaching does not consume additional credits. ` +
-            `Do not re-issue this call, which would start new work and incur new credits.`
-          : 'Timed out while waiting for this step, but it is still processing on the server.',
-        ...(result.asyncId
-          ? {
-              asyncId: result.asyncId,
-              status: 'still_running' as const,
-              nextTool: resumeTool,
-              nextInput: { id: result.asyncId },
-            }
-          : {}),
+        message:
+          `Timed out while waiting for this step, but it is still processing on the server. ` +
+          `Re-attach by calling the ${resumeTool} tool with async ID "${asyncId}" to fetch ` +
+          `the result once it is ready; re-attaching does not consume additional credits. ` +
+          `Do not re-issue this call, which would start new work and incur new credits.`,
+        asyncId,
+        status: 'still_running' as const,
+        nextTool: resumeTool,
+        nextInput: { id: asyncId },
       });
     }
     return result;
