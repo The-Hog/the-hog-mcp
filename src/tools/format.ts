@@ -6,6 +6,8 @@ const INTERNAL_DEBUG_KEYS = new Set([
   'fallbackUsed',
   'fallbackReason',
   'fallback_reason',
+  'filtersRelaxed',
+  'filters_relaxed',
   'provider',
   'providers',
   'providerAttempts',

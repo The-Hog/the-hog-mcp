@@ -1,5 +1,9 @@
 import { normalizeError } from '../../client/errors.js';
-import { pollEnrichment, pollOperation } from '../../client/polling.js';
+import {
+  DEEP_RESEARCH_MAX_INLINE_WAIT_SECONDS,
+  pollEnrichment,
+  pollOperation,
+} from '../../client/polling.js';
 import { stableIdempotencyKey } from '../../client/idempotency.js';
 import type {
   HttpMethod,
@@ -12,8 +16,6 @@ import type { ToolInput } from '../types.js';
 import type { WorkflowContext, WorkflowStepResult } from './types.js';
 
 export type WorkflowPollKind = 'operation' | 'enrichment';
-
-const DEEP_RESEARCH_MAX_INLINE_WAIT_SECONDS = 50;
 
 export interface WorkflowRequestOptions {
   step: string;
@@ -102,11 +104,24 @@ export async function runWorkflowStep(
   try {
     const result = await requestWorkflowStep(client, ctx, options);
     if (result.timedOut) {
+      const resumeTool =
+        options.poll === 'enrichment' ? 'get_enrichment' : 'get_operation';
       ctx.warnings.push({
         step: options.step,
-        message:
-          'Timed out while waiting for this step. Use this step async ID to continue polling.',
-        ...(result.asyncId ? { asyncId: result.asyncId } : {}),
+        message: result.asyncId
+          ? `Timed out while waiting for this step, but it is still processing on the server. ` +
+            `Re-attach by calling the ${resumeTool} tool with async ID "${result.asyncId}" to fetch ` +
+            `the result once it is ready; re-attaching does not consume additional credits. ` +
+            `Do not re-issue this call, which would start new work and incur new credits.`
+          : 'Timed out while waiting for this step, but it is still processing on the server.',
+        ...(result.asyncId
+          ? {
+              asyncId: result.asyncId,
+              status: 'still_running' as const,
+              nextTool: resumeTool,
+              nextInput: { id: result.asyncId },
+            }
+          : {}),
       });
     }
     return result;

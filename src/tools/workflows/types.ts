@@ -14,6 +14,9 @@ export interface WorkflowWarning {
   step: string;
   message: string;
   asyncId?: string;
+  status?: 'still_running';
+  nextTool?: string;
+  nextInput?: Record<string, unknown>;
   error?: Record<string, unknown>;
 }
 

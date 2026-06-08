@@ -75,6 +75,8 @@ test('stripInternalDebugFields removes exact internal provider planner and fallb
     planner: 'relaxed',
     fallback: true,
     fallback_reason: 'provider failed',
+    filtersRelaxed: true,
+    filters_relaxed: true,
     visible: 'ok',
   }) as Record<string, unknown>;
 
