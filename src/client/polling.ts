@@ -14,9 +14,13 @@ export interface PollResult {
   nextPollAfterMs: number;
 }
 
-const DEFAULT_TIMEOUT_SECONDS = 90;
 const DEFAULT_RATE_LIMIT_BACKOFF_MS = 10_000;
 const POLL_BACKOFF_MS = [2_000, 5_000, 10_000] as const;
+
+export const MAX_INLINE_WAIT_SECONDS = 50;
+export const DEEP_RESEARCH_MAX_INLINE_WAIT_SECONDS = MAX_INLINE_WAIT_SECONDS;
+
+const DEFAULT_TIMEOUT_SECONDS = MAX_INLINE_WAIT_SECONDS;
 
 export async function pollOperation(
   client: TheHogToolClient,
@@ -47,10 +51,11 @@ async function pollPath(
   path: string,
   options: PollOptions,
 ): Promise<PollResult> {
-  const timeoutSeconds = finiteNumberOrDefault(
+  const requestedSeconds = finiteNumberOrDefault(
     options.timeoutSeconds,
     DEFAULT_TIMEOUT_SECONDS,
   );
+  const timeoutSeconds = Math.min(requestedSeconds, MAX_INLINE_WAIT_SECONDS);
   const intervalMs =
     typeof options.intervalMs === 'number' && Number.isFinite(options.intervalMs)
       ? Math.max(250, options.intervalMs)

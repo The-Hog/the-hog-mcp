@@ -1,11 +1,59 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { z } from 'zod/v4';
 import {
   continuationForStep,
   createWorkflowContext,
+  deepResearchPollFields,
+  enrichmentPollFields,
   runWorkflowStep,
   workflowIdempotencyKey,
 } from './helpers.js';
+import { waitFields } from '../schemas.js';
+
+test('deepResearchPollFields omits timeoutSeconds in the async default', () => {
+  assert.deepEqual(deepResearchPollFields({}), { waitForResult: false });
+  assert.deepEqual(deepResearchPollFields({ waitForResult: false }), {
+    waitForResult: false,
+  });
+});
+
+test('deepResearchPollFields clamps the opt-in wait to 50s', () => {
+  assert.deepEqual(deepResearchPollFields({ waitForResult: true }), {
+    waitForResult: true,
+    timeoutSeconds: 50,
+  });
+  assert.deepEqual(
+    deepResearchPollFields({ waitForResult: true, timeoutSeconds: 600 }),
+    { waitForResult: true, timeoutSeconds: 50 },
+  );
+  assert.deepEqual(
+    deepResearchPollFields({ waitForResult: true, timeoutSeconds: 20 }),
+    { waitForResult: true, timeoutSeconds: 20 },
+  );
+});
+
+test('waitFields schema accepts an over-cap timeoutSeconds for downstream clamping', () => {
+  const schema = z.object(waitFields).strict();
+  assert.doesNotThrow(() =>
+    schema.parse({ waitForResult: true, timeoutSeconds: 600 }),
+  );
+});
+
+test('enrichmentPollFields always waits, bounded, regardless of waitForResult', () => {
+  assert.deepEqual(enrichmentPollFields({ waitForResult: false }), {
+    waitForResult: true,
+    timeoutSeconds: 50,
+  });
+  assert.deepEqual(enrichmentPollFields({}), {
+    waitForResult: true,
+    timeoutSeconds: 50,
+  });
+  assert.deepEqual(enrichmentPollFields({ timeoutSeconds: 600 }), {
+    waitForResult: true,
+    timeoutSeconds: 50,
+  });
+});
 
 test('workflow idempotency keys preserve distinct step suffixes', () => {
   const longKey = 'x'.repeat(256);
@@ -132,5 +180,8 @@ test('timeout warnings point to the step async ID, not only child operation IDs'
 
   assert.deepEqual(ctx.childOperationIds, ['op_1']);
   assert.equal(ctx.warnings[0]?.asyncId, 'enrich_1');
+  assert.equal(ctx.warnings[0]?.status, 'still_running');
+  assert.equal(ctx.warnings[0]?.nextTool, 'get_enrichment');
+  assert.deepEqual(ctx.warnings[0]?.nextInput, { id: 'enrich_1' });
   assert.match(ctx.warnings[0]?.message ?? '', /async ID/);
 });

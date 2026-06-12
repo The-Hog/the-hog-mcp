@@ -3,6 +3,17 @@
 Run The Hog API from MCP clients such as Claude, Claude Code, Cursor, Codex,
 VS Code, and Windsurf.
 
+## Repository Ownership
+
+This repository is the source of truth for the published `@thehog/mcp` package:
+local stdio tool schemas, workflow tools, polling, async handoff behavior,
+response formatting, package tests, and MCP evals should be changed here.
+
+Core API behavior belongs in `The-Hog/the-hog-core-api`. Hosted remote MCP
+transport, OAuth, session handling, and deployment behavior belong in
+`The-Hog/the-hog-remote-mcp`. Do not modify MCP package behavior from a vendored
+or duplicated copy in another repository.
+
 The Hog supports two MCP setup options:
 
 | Option | Best for | Authentication |

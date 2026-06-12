@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
 import test, { mock } from 'node:test';
-import { pollBackoffMsForAttempt, pollOperation } from './polling.js';
+import {
+  MAX_INLINE_WAIT_SECONDS,
+  pollBackoffMsForAttempt,
+  pollEnrichment,
+  pollOperation,
+} from './polling.js';
 import { TheHogApiError } from './errors.js';
 
 test('pollOperation treats partial_success as terminal', async () => {
@@ -128,6 +133,76 @@ test('pollOperation falls back to safe timing defaults for non-finite options', 
   assert.equal(
     typeof requests[0]?.timeoutMs === 'number' && Number.isFinite(requests[0].timeoutMs),
     true,
+  );
+});
+
+test('pollOperation default inline wait stays under the MCP gateway ceiling', async () => {
+  const requests: Array<{ timeoutMs?: number }> = [];
+  await pollOperation(
+    {
+      request: async (request: { timeoutMs?: number }) => {
+        requests.push(request);
+        return {
+          data: { id: 'op_1', status: 'succeeded' },
+          status: 200,
+          requestId: 'req_1',
+        };
+      },
+    } as never,
+    'op_1',
+    {},
+  );
+
+  assert.equal(typeof requests[0]?.timeoutMs, 'number');
+  assert.ok(
+    (requests[0]?.timeoutMs ?? Number.POSITIVE_INFINITY) <=
+      MAX_INLINE_WAIT_SECONDS * 1_000,
+  );
+});
+
+test('pollOperation clamps an over-ceiling requested timeout to the gateway ceiling', async () => {
+  const requests: Array<{ timeoutMs?: number }> = [];
+  await pollOperation(
+    {
+      request: async (request: { timeoutMs?: number }) => {
+        requests.push(request);
+        return {
+          data: { id: 'op_1', status: 'succeeded' },
+          status: 200,
+          requestId: 'req_1',
+        };
+      },
+    } as never,
+    'op_1',
+    { timeoutSeconds: 600 },
+  );
+
+  assert.ok(
+    (requests[0]?.timeoutMs ?? Number.POSITIVE_INFINITY) <=
+      MAX_INLINE_WAIT_SECONDS * 1_000,
+  );
+});
+
+test('pollEnrichment default inline wait stays under the MCP gateway ceiling', async () => {
+  const requests: Array<{ timeoutMs?: number }> = [];
+  await pollEnrichment(
+    {
+      request: async (request: { timeoutMs?: number }) => {
+        requests.push(request);
+        return {
+          data: { id: 'enr_1', status: 'succeeded' },
+          status: 200,
+          requestId: 'req_1',
+        };
+      },
+    } as never,
+    'enr_1',
+    {},
+  );
+
+  assert.ok(
+    (requests[0]?.timeoutMs ?? Number.POSITIVE_INFINITY) <=
+      MAX_INLINE_WAIT_SECONDS * 1_000,
   );
 });
 
