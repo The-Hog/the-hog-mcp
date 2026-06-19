@@ -475,6 +475,51 @@ test('find people at target accounts keeps account identity in structured filter
   });
 });
 
+test('find people at target accounts sends neutral query for company-only searches', async () => {
+  const tool = workflowTools.find(
+    (candidate) => candidate.name === 'find_people_at_target_accounts',
+  );
+  assert.ok(tool);
+
+  const requests: Array<{ method: string; path: string; body?: unknown }> = [];
+  await tool.execute(
+    {
+      companyDomains: ['commonroom.io'],
+      limit: 5,
+      timeoutSeconds: 5,
+    },
+    fakeClient(async (request) => {
+      requests.push(request);
+      if (request.method === 'POST' && request.path === '/api/v1/people/search') {
+        return {
+          data: { operationId: 'op_people', status: 'queued' },
+          status: 202,
+          requestId: 'req_people',
+        };
+      }
+      if (request.path === '/api/operations/op_people') {
+        return {
+          data: { id: 'op_people', status: 'succeeded', result: { data: [] } },
+          status: 200,
+          requestId: 'req_people_poll',
+        };
+      }
+      throw new Error(`Unexpected request ${request.method} ${request.path}`);
+    }),
+  );
+
+  assert.deepEqual(requests[0]?.body, {
+    query: 'people',
+    limit: 5,
+    includeContacts: false,
+    filters: {
+      company: {
+        domains: ['commonroom.io'],
+      },
+    },
+  });
+});
+
 test('find people at target accounts returns a resume handoff on forced timeout', async () => {
   const tool = workflowTools.find(
     (candidate) => candidate.name === 'find_people_at_target_accounts',
