@@ -216,10 +216,7 @@ async function findPeopleAtTargetAccounts(input: ToolInput, client: TheHogToolCl
       ? input.titleMatch
       : undefined;
   const locations = readStringArray(input.locations);
-  const query =
-    titles.length > 0
-      ? `${titles.join(' OR ')} at target accounts`
-      : 'People at target accounts';
+  const query = targetAccountPeopleQuery(titles);
   const peopleStep = await runWorkflowStep(client, ctx, {
     step: 'search_people',
     method: 'POST',
@@ -282,6 +279,10 @@ async function findPeopleAtTargetAccounts(input: ToolInput, client: TheHogToolCl
       enrichmentCount: extractItems(enrichmentStep, ['data', 'results']).length,
     },
   };
+}
+
+function targetAccountPeopleQuery(titles: readonly string[]): string {
+  return titles.length > 0 ? titles.join(' OR ') : 'people';
 }
 
 async function enrichProspectList(input: ToolInput, client: TheHogToolClient) {
