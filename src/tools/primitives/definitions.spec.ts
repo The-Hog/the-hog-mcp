@@ -288,6 +288,14 @@ test('mutating primitive tools expose idempotency and risk annotations', async (
     scrape_web_page: { url: 'https://example.com' },
     scrape_web_pages: { urls: ['https://example.com'] },
     detect_image_deepfake: { url: 'https://example.com/image.jpg' },
+    get_seo_domain_overview: { domain: 'example.com' },
+    list_seo_keywords: {
+      domain: 'example.com',
+      searchType: 'MostValuable',
+    },
+    list_seo_competing_keywords: {
+      includedDomains: ['example.com', 'competitor.com'],
+    },
     get_facebook_page: { url: 'https://www.facebook.com/openai' },
     get_facebook_post: { url: 'https://www.facebook.com/openai/posts/123' },
     get_linkedin_company: { identifier: 'openai' },

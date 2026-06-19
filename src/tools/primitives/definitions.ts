@@ -1,6 +1,7 @@
 import { corePrimitiveTools } from './core.js';
 import { monitorPrimitiveTools } from './monitors.js';
 import { searchPrimitiveTools } from './search.js';
+import { seoPrimitiveTools } from './seo.js';
 import { socialPrimitiveTools } from './social.js';
 import type { PrimitiveToolDefinition } from './types.js';
 import { webPrimitiveTools } from './web.js';
@@ -22,6 +23,9 @@ const publicToolNames = [
   'scrape_web_page',
   'scrape_web_pages',
   'detect_image_deepfake',
+  'get_seo_domain_overview',
+  'list_seo_keywords',
+  'list_seo_competing_keywords',
   'get_facebook_page',
   'get_facebook_post',
   'get_linkedin_company',
@@ -62,6 +66,7 @@ export const primitiveTools: PrimitiveToolDefinition[] = [
   ...corePrimitiveTools,
   ...searchPrimitiveTools,
   ...webPrimitiveTools,
+  ...seoPrimitiveTools,
   ...socialPrimitiveTools,
   ...monitorPrimitiveTools,
 ];
