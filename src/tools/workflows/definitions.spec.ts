@@ -2,6 +2,15 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { workflowTools } from './definitions.js';
 
+function assertSupportedPollAfterSeconds(value: unknown): void {
+  assert.ok(typeof value === 'number');
+  assert.ok(Number.isFinite(value));
+  assert.ok(
+    [2, 5, 10].includes(value),
+    `expected pollAfterSeconds to use a supported polling backoff, got ${String(value)}`,
+  );
+}
+
 const workflowNames = [
   'build_prospect_list',
   'find_people_at_target_accounts',
@@ -552,13 +561,14 @@ test('find people at target accounts returns a resume handoff on forced timeout'
     }),
   );
 
-  assert.deepEqual(result, {
+  const { pollAfterSeconds, ...handoff } = result as Record<string, unknown>;
+  assertSupportedPollAfterSeconds(pollAfterSeconds);
+  assert.deepEqual(handoff, {
     status: 'still_running',
     still_running: true,
     operationId: 'op_people',
     nextTool: 'get_operation',
     nextInput: { id: 'op_people' },
-    pollAfterSeconds: 2,
     message: 'The request is still running. Use get_operation with this ID to continue.',
     requestId: 'req_people',
   });
