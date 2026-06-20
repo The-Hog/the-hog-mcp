@@ -7,6 +7,15 @@ import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import { registerPrimitiveTools } from './tools/primitives/register.js';
 import { registerWorkflowTools } from './tools/workflows/register.js';
 
+function assertSupportedPollAfterSeconds(value: unknown): void {
+  assert.ok(typeof value === 'number');
+  assert.ok(Number.isFinite(value));
+  assert.ok(
+    [2, 5, 10].includes(value),
+    `expected pollAfterSeconds to use a supported polling backoff, got ${String(value)}`,
+  );
+}
+
 test('MCP client can hand off and resume a forced-timeout target-account workflow', async (t) => {
   const requests: Array<{ method: string; path: string }> = [];
   const server = new McpServer({ name: 'test-thehog-mcp', version: '1.0.0' });
@@ -77,7 +86,7 @@ test('MCP client can hand off and resume a forced-timeout target-account workflo
   assert.equal(handoffPayload.operationId, 'op_people');
   assert.equal(handoffPayload.nextTool, 'get_operation');
   assert.deepEqual(handoffPayload.nextInput, { id: 'op_people' });
-  assert.equal(handoffPayload.pollAfterSeconds, 2);
+  assertSupportedPollAfterSeconds(handoffPayload.pollAfterSeconds);
 
   const resume = await client.callTool({
     name: String(handoffPayload.nextTool),

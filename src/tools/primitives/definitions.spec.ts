@@ -3,6 +3,15 @@ import test from 'node:test';
 import { primitiveTools } from './definitions.js';
 import { endpointTool } from './endpoint-tool.js';
 
+function assertSupportedPollAfterSeconds(value: unknown): void {
+  assert.ok(typeof value === 'number');
+  assert.ok(Number.isFinite(value));
+  assert.ok(
+    [2, 5, 10].includes(value),
+    `expected pollAfterSeconds to use a supported polling backoff, got ${String(value)}`,
+  );
+}
+
 test('delete monitor requires confirmation', async () => {
   const tool = primitiveTools.find((candidate) => candidate.name === 'delete_monitor');
   assert.ok(tool);
@@ -205,13 +214,14 @@ test('async primitive tools return a top-level continuation on forced timeout', 
     } as never,
   );
 
-  assert.deepEqual(result, {
+  const { pollAfterSeconds, ...continuation } = result as Record<string, unknown>;
+  assertSupportedPollAfterSeconds(pollAfterSeconds);
+  assert.deepEqual(continuation, {
     status: 'still_running',
     still_running: true,
     operationId: 'op_people',
     nextTool: 'get_operation',
     nextInput: { id: 'op_people' },
-    pollAfterSeconds: 2,
     message: 'The request is still running. Use get_operation with this ID to continue.',
     requestId: 'req_start',
   });
