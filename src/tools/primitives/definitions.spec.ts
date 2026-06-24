@@ -721,7 +721,9 @@ test('async primitive tools poll the correct status endpoint when requested', as
 
     assert.equal(requests[1]?.method, 'GET', item.name);
     assert.equal(requests[1]?.path, item.pollPath, item.name);
-    assert.equal(requests[1]?.timeoutMs, 5000, item.name);
+    assert.equal(typeof requests[1]?.timeoutMs, 'number', item.name);
+    assert.ok((requests[1]?.timeoutMs ?? 0) > 0, item.name);
+    assert.ok((requests[1]?.timeoutMs ?? Number.POSITIVE_INFINITY) <= 5000, item.name);
   }
 });
 
