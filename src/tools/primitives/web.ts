@@ -1,7 +1,27 @@
 import { z } from 'zod/v4';
-import { idempotencyField } from '../schemas.js';
+import { idempotencyField, jsonObjectSchema } from '../schemas.js';
 import { endpointTool, omitControlFields } from './endpoint-tool.js';
 import type { PrimitiveToolDefinition, ToolInput } from './types.js';
+
+const webScrapeFormatSchema = z.enum([
+  'text',
+  'markdown',
+  'html',
+  'links',
+  'metadata',
+  'json',
+]);
+
+const webScrapeFormatsSchema = z
+  .array(webScrapeFormatSchema)
+  .min(1)
+  .refine((formats) => new Set(formats).size === formats.length, {
+    message: 'formats must not contain duplicates.',
+  })
+  .optional()
+  .describe(
+    'Output formats to return. Defaults to ["text"]. Include "json" only when jsonSchema is provided.',
+  );
 
 export const webPrimitiveTools: PrimitiveToolDefinition[] = [
   endpointTool({
@@ -43,17 +63,30 @@ export const webPrimitiveTools: PrimitiveToolDefinition[] = [
   endpointTool({
     name: 'scrape_web_page',
     description:
-      'Scrape a single web page and return readable content. Use this when the user needs the content of one URL. This may consume The Hog credits and large responses are trimmed for MCP clients.',
+      'Scrape a single web page and return requested content formats such as text, markdown, HTML, links, metadata, or schema-guided JSON. Use this when the user needs one URL. This may consume The Hog credits and large responses are trimmed for MCP clients.',
     method: 'POST',
     path: '/api/v1/platform/scrapers/web/scrape',
     endpointPath: '/api/v1/platform/scrapers/web/scrape',
     inputSchema: {
       url: z.string().min(1),
       renderJs: z.boolean().optional(),
+      formats: webScrapeFormatsSchema,
+      jsonSchema: jsonObjectSchema
+        .optional()
+        .describe(
+          'JSON Schema object for schema-guided extraction. Required when formats includes "json"; the schema root must be an object.',
+        ),
+      instructions: z
+        .string()
+        .min(1)
+        .max(8000)
+        .optional()
+        .describe('Extra extraction instructions used only with formats including "json".'),
       maxAgeMs: z.number().int().min(0).max(30 * 24 * 60 * 60 * 1000).optional(),
       maxAgeDays: z.number().int().min(0).max(30).optional(),
       ...idempotencyField,
     },
+    body: scrapeWebPageBody,
     idempotent: true,
     openWorld: true,
   }),
@@ -92,6 +125,22 @@ export const webPrimitiveTools: PrimitiveToolDefinition[] = [
     openWorld: true,
   }),
 ];
+
+function scrapeWebPageBody(input: ToolInput): Record<string, unknown> {
+  const body = omitControlFields(input);
+  const formats = Array.isArray(body.formats) ? body.formats : [];
+  const wantsJson = formats.includes('json');
+  if (wantsJson && body.jsonSchema === undefined) {
+    throw new Error('scrape_web_page formats including json require jsonSchema.');
+  }
+  if (!wantsJson && body.jsonSchema !== undefined) {
+    throw new Error('scrape_web_page jsonSchema requires formats to include json.');
+  }
+  if (!wantsJson && body.instructions !== undefined) {
+    throw new Error('scrape_web_page instructions require formats to include json.');
+  }
+  return body;
+}
 
 function scrapeWebPagesBody(input: ToolInput): Record<string, unknown> {
   const body = omitControlFields(input);
