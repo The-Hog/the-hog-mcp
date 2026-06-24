@@ -279,6 +279,118 @@ test('scrape_web_pages requires at least one url or item', async () => {
   );
 });
 
+test('scrape_web_page forwards requested formats and schema-guided extraction fields', async () => {
+  const tool = primitiveTools.find((candidate) => candidate.name === 'scrape_web_page');
+  assert.ok(tool);
+
+  const requests: Array<{
+    method: string;
+    path: string;
+    body?: unknown;
+    idempotencyKey?: string;
+  }> = [];
+  await tool.execute(
+    {
+      url: 'https://example.com',
+      renderJs: true,
+      formats: ['markdown', 'json'],
+      jsonSchema: {
+        type: 'object',
+        properties: { title: { type: 'string' } },
+        required: ['title'],
+        additionalProperties: false,
+      },
+      instructions: 'Extract the page title.',
+      idempotencyKey: 'idem_scrape_json',
+    },
+    {
+      request: async (request: {
+        method: string;
+        path: string;
+        body?: unknown;
+        idempotencyKey?: string;
+      }) => {
+        requests.push(request);
+        return {
+          data: { data: { markdown: '# Example', json: { title: 'Example' } } },
+          status: 200,
+          requestId: 'req_scrape',
+        };
+      },
+      createIdempotencyKey: () => 'generated_scrape_web_page',
+    } as never,
+  );
+
+  assert.deepEqual(requests, [
+    {
+      method: 'POST',
+      path: '/api/v1/platform/scrapers/web/scrape',
+      query: undefined,
+      body: {
+        url: 'https://example.com',
+        renderJs: true,
+        formats: ['markdown', 'json'],
+        jsonSchema: {
+          type: 'object',
+          properties: { title: { type: 'string' } },
+          required: ['title'],
+          additionalProperties: false,
+        },
+        instructions: 'Extract the page title.',
+      },
+      idempotencyKey: 'idem_scrape_json',
+    },
+  ]);
+});
+
+test('scrape_web_page validates json extraction fields before sending requests', async () => {
+  const tool = primitiveTools.find((candidate) => candidate.name === 'scrape_web_page');
+  assert.ok(tool);
+
+  const client = {
+    request: async () => {
+      throw new Error('request should not be sent');
+    },
+    createIdempotencyKey: () => 'generated_scrape_web_page',
+  } as never;
+
+  await assert.rejects(
+    () =>
+      tool.execute(
+        {
+          url: 'https://example.com',
+          formats: ['json'],
+        },
+        client,
+      ),
+    /jsonSchema/,
+  );
+
+  await assert.rejects(
+    () =>
+      tool.execute(
+        {
+          url: 'https://example.com',
+          jsonSchema: { type: 'object' },
+        },
+        client,
+      ),
+    /formats to include json/,
+  );
+
+  await assert.rejects(
+    () =>
+      tool.execute(
+        {
+          url: 'https://example.com',
+          instructions: 'Extract the title.',
+        },
+        client,
+      ),
+    /formats to include json/,
+  );
+});
+
 test('mutating primitive tools expose idempotency and risk annotations', async () => {
   const sampleInputs: Record<string, Record<string, unknown>> = {
     search_companies: { query: 'security companies' },
