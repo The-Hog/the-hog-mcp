@@ -15,7 +15,6 @@ const webScrapeFormatSchema = z.enum([
 const webScrapeFormatsSchema = z
   .array(webScrapeFormatSchema)
   .min(1)
-  .max(6)
   .refine((formats) => new Set(formats).size === formats.length, {
     message: 'formats must not contain duplicates.',
   })
