@@ -1,3 +1,4 @@
+import { z } from 'zod/v4';
 import {
   pollEnrichment,
   pollOperation,
@@ -14,9 +15,12 @@ import type {
   ToolInput,
 } from './types.js';
 
-export function endpointTool(options: EndpointToolOptions): PrimitiveToolDefinition {
+export function endpointTool(
+  options: EndpointToolOptions,
+): PrimitiveToolDefinition {
   const method = options.method;
   const endpointPath = options.endpointPath;
+  const inputSchema = z.object(options.inputSchema).passthrough();
   return {
     name: options.name,
     description: options.description,
@@ -25,15 +29,17 @@ export function endpointTool(options: EndpointToolOptions): PrimitiveToolDefinit
       readOnlyHint: method === 'GET',
       destructiveHint: options.requireConfirm === true || method === 'DELETE',
       idempotentHint:
-        method === 'GET' || (options.idempotent === true && options.requireConfirm !== true),
+        method === 'GET' ||
+        (options.idempotent === true && options.requireConfirm !== true),
       openWorldHint: options.openWorld ?? method !== 'GET',
       ...options.annotations,
     },
     endpoint: { method, path: endpointPath },
-    execute: async (input, client) => {
-      if (options.requireConfirm && input.confirm !== true) {
+    execute: async (rawInput, client) => {
+      if (options.requireConfirm && rawInput.confirm !== true) {
         throw new Error('This destructive tool requires confirm: true.');
       }
+      const input = inputSchema.parse(rawInput) as ToolInput;
       const path =
         typeof options.path === 'function' ? options.path(input) : options.path;
       const body =
@@ -119,11 +125,19 @@ export function endpointTool(options: EndpointToolOptions): PrimitiveToolDefinit
 
 export function omitControlFields(input: ToolInput): Record<string, unknown> {
   return stripUndefined(
-    omit(input, ['waitForResult', 'timeoutSeconds', 'idempotencyKey', 'confirm']),
+    omit(input, [
+      'waitForResult',
+      'timeoutSeconds',
+      'idempotencyKey',
+      'confirm',
+    ]),
   ) as Record<string, unknown>;
 }
 
-export function omit(input: ToolInput, keys: string[]): Record<string, unknown> {
+export function omit(
+  input: ToolInput,
+  keys: string[],
+): Record<string, unknown> {
   const skipped = new Set(keys);
   const output: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(input)) {
@@ -134,7 +148,10 @@ export function omit(input: ToolInput, keys: string[]): Record<string, unknown> 
   return output;
 }
 
-export function pick(input: ToolInput, keys: string[]): Record<string, unknown> {
+export function pick(
+  input: ToolInput,
+  keys: string[],
+): Record<string, unknown> {
   const output: Record<string, unknown> = {};
   for (const key of keys) {
     if (input[key] !== undefined) {
@@ -167,7 +184,10 @@ function readOperationId(value: unknown): string | null {
   if (!value || typeof value !== 'object') {
     return null;
   }
-  const record = value as { operationId?: unknown; data?: { operationId?: unknown } };
+  const record = value as {
+    operationId?: unknown;
+    data?: { operationId?: unknown };
+  };
   if (typeof record.operationId === 'string') {
     return record.operationId;
   }
@@ -177,7 +197,10 @@ function readOperationId(value: unknown): string | null {
   return null;
 }
 
-export function readAsyncId(value: unknown, pollKind: PollKind = 'operation'): string | null {
+export function readAsyncId(
+  value: unknown,
+  pollKind: PollKind = 'operation',
+): string | null {
   if (!value || typeof value !== 'object') {
     return null;
   }
@@ -192,7 +215,8 @@ export function readAsyncId(value: unknown, pollKind: PollKind = 'operation'): s
   }
   if (typeof record.operationId === 'string') return record.operationId;
   if (typeof record.id === 'string') return record.id;
-  if (typeof record.data?.operationId === 'string') return record.data.operationId;
+  if (typeof record.data?.operationId === 'string')
+    return record.data.operationId;
   if (typeof record.data?.id === 'string') return record.data.id;
   return null;
 }

@@ -118,7 +118,7 @@ export const socialPrimitiveTools: PrimitiveToolDefinition[] = [
   endpointTool({
     name: 'list_linkedin_post_reactions',
     description:
-      'Fetch reactions for public LinkedIn posts. This may consume The Hog credits.',
+      'Fetch reactions for public LinkedIn posts. This may consume The Hog credits. Reactor identity comes from LinkedIn/upstream data: actor.id and actor.linkedinUrl can be opaque ACoAA-style member identifiers rather than canonical /in/ vanity slugs, so inspect profileUrlKind/sourceActorIdKind/resolutionStatus when present.',
     method: 'POST',
     path: '/api/v1/platform/scrapers/linkedin/post-reactions',
     endpointPath: '/api/v1/platform/scrapers/linkedin/post-reactions',

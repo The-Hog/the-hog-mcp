@@ -1,5 +1,5 @@
 import { z } from 'zod/v4';
-import { idempotencyField, jsonObjectSchema } from '../schemas.js';
+import { idempotencyField, jsonObjectSchema, waitFields } from '../schemas.js';
 import { endpointTool, omitControlFields } from './endpoint-tool.js';
 import type { PrimitiveToolDefinition, ToolInput } from './types.js';
 
@@ -86,8 +86,44 @@ export const webPrimitiveTools: PrimitiveToolDefinition[] = [
       maxAgeDays: z.number().int().min(0).max(30).optional(),
       ...idempotencyField,
     },
-    body: scrapeWebPageBody,
+    body: scrapeWebPageBodyFor('scrape_web_page'),
     idempotent: true,
+    openWorld: true,
+  }),
+  endpointTool({
+    name: 'submit_web_scrape_job',
+    description:
+      'Queue an async browser scrape for dynamic or long pages. Use this when a normal scrape is not enough and the user can poll the returned operation. This may consume The Hog credits.',
+    method: 'POST',
+    path: '/api/v1/platform/scrapers/web/scrape/jobs',
+    endpointPath: '/api/v1/platform/scrapers/web/scrape/jobs',
+    inputSchema: {
+      url: z.string().min(1),
+      formats: webScrapeFormatsSchema,
+      jsonSchema: jsonObjectSchema
+        .optional()
+        .describe(
+          'JSON Schema object for schema-guided extraction. Required when formats includes "json"; the schema root must be an object.',
+        ),
+      instructions: z
+        .string()
+        .min(1)
+        .max(8000)
+        .optional()
+        .describe('Extra extraction instructions used only with formats including "json".'),
+      maxAgeMs: z.number().int().min(0).max(30 * 24 * 60 * 60 * 1000).optional(),
+      maxDurationMs: z.number().int().min(5000).max(600000).optional(),
+      maxScrolls: z.number().int().min(0).max(200).optional(),
+      scrollWaitMs: z.number().int().min(100).max(5000).optional(),
+      contentStableRounds: z.number().int().min(1).max(20).optional(),
+      expandClickableContent: z.boolean().optional(),
+      maxExpansionClicks: z.number().int().min(0).max(200).optional(),
+      ...waitFields,
+      ...idempotencyField,
+    },
+    body: scrapeWebPageBodyFor('submit_web_scrape_job'),
+    idempotent: true,
+    poll: 'operation',
     openWorld: true,
   }),
   endpointTool({
@@ -126,18 +162,28 @@ export const webPrimitiveTools: PrimitiveToolDefinition[] = [
   }),
 ];
 
-function scrapeWebPageBody(input: ToolInput): Record<string, unknown> {
+function scrapeWebPageBodyFor(toolName: string) {
+  return (input: ToolInput): Record<string, unknown> =>
+    scrapeWebPageBody(toolName, input);
+}
+
+function scrapeWebPageBody(
+  toolName: string,
+  input: ToolInput,
+): Record<string, unknown> {
   const body = omitControlFields(input);
   const formats = Array.isArray(body.formats) ? body.formats : [];
   const wantsJson = formats.includes('json');
   if (wantsJson && body.jsonSchema === undefined) {
-    throw new Error('scrape_web_page formats including json require jsonSchema.');
+    throw new Error(`${toolName} formats including json require jsonSchema.`);
   }
   if (!wantsJson && body.jsonSchema !== undefined) {
-    throw new Error('scrape_web_page jsonSchema requires formats to include json.');
+    throw new Error(`${toolName} jsonSchema requires formats to include json.`);
   }
   if (!wantsJson && body.instructions !== undefined) {
-    throw new Error('scrape_web_page instructions require formats to include json.');
+    throw new Error(
+      `${toolName} instructions require formats to include json.`,
+    );
   }
   return body;
 }

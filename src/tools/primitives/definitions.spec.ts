@@ -391,6 +391,32 @@ test('scrape_web_page validates json extraction fields before sending requests',
   );
 });
 
+test('submit_web_scrape_job reports its own name in json validation errors', async () => {
+  const tool = primitiveTools.find(
+    (candidate) => candidate.name === 'submit_web_scrape_job',
+  );
+  assert.ok(tool);
+
+  const client = {
+    request: async () => {
+      throw new Error('request should not be sent');
+    },
+    createIdempotencyKey: () => 'generated_submit_web_scrape_job',
+  } as never;
+
+  await assert.rejects(
+    () =>
+      tool.execute(
+        {
+          url: 'https://example.com',
+          formats: ['json'],
+        },
+        client,
+      ),
+    /submit_web_scrape_job formats including json require jsonSchema/,
+  );
+});
+
 test('mutating primitive tools expose idempotency and risk annotations', async () => {
   const sampleInputs: Record<string, Record<string, unknown>> = {
     search_companies: { query: 'security companies' },
@@ -408,6 +434,7 @@ test('mutating primitive tools expose idempotency and risk annotations', async (
     search_web: { query: 'the hog api' },
     crawl_website: { url: 'https://example.com' },
     scrape_web_page: { url: 'https://example.com' },
+    submit_web_scrape_job: { url: 'https://example.com' },
     scrape_web_pages: { urls: ['https://example.com'] },
     detect_image_deepfake: { url: 'https://example.com/image.jpg' },
     get_seo_domain_overview: { domain: 'example.com' },
@@ -459,7 +486,9 @@ test('mutating primitive tools expose idempotency and risk annotations', async (
   };
 
   const mutatingTools = primitiveTools.filter(
-    (tool) => tool.endpoint.method === 'POST' || tool.endpoint.method === 'PATCH',
+    (tool) =>
+      (tool.endpoint.method === 'POST' || tool.endpoint.method === 'PATCH') &&
+      tool.annotations.readOnlyHint !== true,
   );
   assert.equal(
     mutatingTools.every((tool) => tool.name in sampleInputs),
@@ -513,7 +542,9 @@ test('detect_image_deepfake exposes only URL input and hides provider identity',
 });
 
 test('read-only and destructive primitive tools expose risk annotations', () => {
-  const readOnlyTools = primitiveTools.filter((tool) => tool.endpoint.method === 'GET');
+  const readOnlyTools = primitiveTools.filter(
+    (tool) => tool.annotations.readOnlyHint === true,
+  );
   assert.ok(readOnlyTools.length > 0);
   for (const tool of readOnlyTools) {
     assert.deepEqual(
@@ -537,6 +568,105 @@ test('read-only and destructive primitive tools expose risk annotations', () => 
     },
     { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
   );
+});
+
+test('estimate_people_search previews contact spend controls without polling', async () => {
+  const tool = primitiveTools.find(
+    (candidate) => candidate.name === 'estimate_people_search',
+  );
+  assert.ok(tool);
+  assert.deepEqual(
+    {
+      readOnlyHint: tool.annotations.readOnlyHint,
+      destructiveHint: tool.annotations.destructiveHint,
+      idempotentHint: tool.annotations.idempotentHint,
+    },
+    { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
+  );
+  assert.ok(tool.inputSchema.contactFields);
+  assert.ok(tool.inputSchema.maxCredits);
+
+  const requests: Array<{
+    method: string;
+    path: string;
+    body?: unknown;
+    idempotencyKey?: string;
+  }> = [];
+  const result = await tool.execute(
+    {
+      query: 'VP Engineering',
+      includeContacts: true,
+      contactFields: ['email'],
+      maxCredits: 2500,
+      idempotencyKey: 'idem_estimate_people_search',
+    },
+    {
+      request: async (request: {
+        method: string;
+        path: string;
+        body?: unknown;
+        idempotencyKey?: string;
+      }) => {
+        requests.push(request);
+        return {
+          data: { estimatedCredits: 2500, withinPlanLimits: true },
+          status: 200,
+          requestId: 'req_estimate',
+        };
+      },
+      createIdempotencyKey: () => 'generated_estimate_people_search',
+    } as never,
+  );
+
+  assert.deepEqual(
+    requests.map((request) => ({
+      method: request.method,
+      path: request.path,
+      idempotencyKey: request.idempotencyKey,
+      body: request.body,
+    })),
+    [
+      {
+        method: 'POST',
+        path: '/api/v1/people/search/estimate',
+        idempotencyKey: 'idem_estimate_people_search',
+        body: {
+          query: 'VP Engineering',
+          includeContacts: true,
+          contactFields: ['email'],
+          maxCredits: 2500,
+        },
+      },
+    ],
+  );
+  assert.deepEqual(result, {
+    response: { estimatedCredits: 2500, withinPlanLimits: true },
+    requestId: 'req_estimate',
+  });
+});
+
+test('people search contactFields rejects duplicate values before request dispatch', async () => {
+  for (const name of ['search_people', 'estimate_people_search']) {
+    const tool = primitiveTools.find((candidate) => candidate.name === name);
+    assert.ok(tool);
+    await assert.rejects(
+      () =>
+        tool.execute(
+          {
+            query: 'VP Engineering',
+            includeContacts: true,
+            contactFields: ['email', 'email'],
+          },
+          {
+            request: async () => {
+              throw new Error('request should not be sent');
+            },
+            createIdempotencyKey: () => `generated_${name}`,
+          } as never,
+        ),
+      /contactFields values must be unique/,
+    );
+  }
 });
 
 test('start_deep_research schema matches the public request body', () => {

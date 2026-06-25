@@ -10,6 +10,36 @@ import { operationIdField, searchBodyShape } from './common.js';
 import { endpointTool, omitControlFields } from './endpoint-tool.js';
 import type { PrimitiveToolDefinition } from './types.js';
 
+const peopleSearchContactFields = z
+  .array(z.enum(['email', 'phone']))
+  .min(1)
+  .max(2)
+  .refine((fields) => new Set(fields).size === fields.length, {
+    message: 'contactFields values must be unique',
+  })
+  .optional()
+  .describe(
+    'Contact fields to enrich when includeContacts is true. Use ["email"] to avoid phone/mobile enrichment cost.',
+  );
+
+const peopleSearchSpendControls = {
+  includeContacts: z
+    .boolean()
+    .optional()
+    .describe(
+      'Whether to enrich returned people with contact data. This can be much more expensive than discovery alone, especially when phone is requested.',
+    ),
+  contactFields: peopleSearchContactFields,
+  maxCredits: z
+    .number()
+    .int()
+    .min(0)
+    .optional()
+    .describe(
+      'Maximum credits the people search operation may charge. Too-low caps are rejected before paid provider work.',
+    ),
+};
+
 export const corePrimitiveTools: PrimitiveToolDefinition[] = [
   endpointTool({
     name: 'search_companies',
@@ -29,7 +59,8 @@ export const corePrimitiveTools: PrimitiveToolDefinition[] = [
   }),
   endpointTool({
     name: 'list_operations',
-    description: 'List recent The Hog async operations visible to the current credentials.',
+    description:
+      'List recent The Hog async operations visible to the current credentials.',
     method: 'GET',
     path: '/api/operations',
     endpointPath: '/api/operations',
@@ -38,19 +69,39 @@ export const corePrimitiveTools: PrimitiveToolDefinition[] = [
   endpointTool({
     name: 'search_people',
     description:
-      'Search people using The Hog people search API. Use this when the user wants contacts by role, seniority, company, location, or other public filters. This may consume The Hog credits. This starts an async operation and polls for the result by default; set waitForResult to false to return the operation ID.',
+      'Search people using The Hog people search API. Use this when the user wants contacts by role, seniority, company, location, or other public filters. This may consume The Hog credits. Contact enrichment is explicit: includeContacts=true can run paid email/phone provider work, and phone/mobile enrichment is usually the expensive part. Prefer contactFields:["email"] unless phone is needed, and set maxCredits to avoid surprise spend. This starts an async operation and polls for the result by default; set waitForResult to false to return the operation ID.',
     method: 'POST',
     path: '/api/v1/people/search',
     endpointPath: '/api/v1/people/search',
     inputSchema: {
       ...searchBodyShape,
-      includeContacts: z.boolean().optional(),
+      ...peopleSearchSpendControls,
       ...waitFields,
       ...idempotencyField,
     },
     body: omitControlFields,
     idempotent: true,
     poll: 'operation',
+  }),
+  endpointTool({
+    name: 'estimate_people_search',
+    description:
+      'Estimate the conservative credit ceiling for search_people before starting an async people-search operation. Use this before includeContacts=true or phone/contact enrichment. This does not spend credits.',
+    method: 'POST',
+    path: '/api/v1/people/search/estimate',
+    endpointPath: '/api/v1/people/search/estimate',
+    inputSchema: {
+      ...searchBodyShape,
+      ...peopleSearchSpendControls,
+      ...idempotencyField,
+    },
+    body: omitControlFields,
+    idempotent: true,
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
   }),
   endpointTool({
     name: 'enrich_contact',
