@@ -1,10 +1,11 @@
-import { isTerminalStatus, readStatus } from './operation-status.js';
-import type { TheHogToolClient } from './thehog-client.js';
-import { TheHogApiError } from './errors.js';
+import { isTerminalStatus, readStatus } from "./operation-status.js";
+import type { TheHogToolClient } from "./thehog-client.js";
+import { TheHogApiError } from "./errors.js";
 
 export interface PollOptions {
   timeoutSeconds?: number;
   intervalMs?: number;
+  startedAtMs?: number;
 }
 
 export interface PollResult {
@@ -27,7 +28,11 @@ export async function pollOperation(
   operationId: string,
   options: PollOptions = {},
 ): Promise<PollResult> {
-  return pollPath(client, `/api/operations/${encodeURIComponent(operationId)}`, options);
+  return pollPath(
+    client,
+    `/api/operations/${encodeURIComponent(operationId)}`,
+    options,
+  );
 }
 
 export async function pollSearchResult(
@@ -35,7 +40,11 @@ export async function pollSearchResult(
   searchId: string,
   options: PollOptions = {},
 ): Promise<PollResult> {
-  return pollPath(client, `/api/v1/search/${encodeURIComponent(searchId)}`, options);
+  return pollPath(
+    client,
+    `/api/v1/search/${encodeURIComponent(searchId)}`,
+    options,
+  );
 }
 
 export async function pollEnrichment(
@@ -43,7 +52,11 @@ export async function pollEnrichment(
   enrichmentId: string,
   options: PollOptions = {},
 ): Promise<PollResult> {
-  return pollPath(client, `/api/enrichments/${encodeURIComponent(enrichmentId)}`, options);
+  return pollPath(
+    client,
+    `/api/enrichments/${encodeURIComponent(enrichmentId)}`,
+    options,
+  );
 }
 
 async function pollPath(
@@ -57,11 +70,14 @@ async function pollPath(
   );
   const timeoutSeconds = Math.min(requestedSeconds, MAX_INLINE_WAIT_SECONDS);
   const intervalMs =
-    typeof options.intervalMs === 'number' && Number.isFinite(options.intervalMs)
+    typeof options.intervalMs === "number" &&
+    Number.isFinite(options.intervalMs)
       ? Math.max(250, options.intervalMs)
       : null;
   const timeoutMs = Math.max(1, timeoutSeconds) * 1_000;
-  const deadline = Date.now() + timeoutMs;
+  const now = Date.now();
+  const startedAtMs = finiteStartedAtMs(options.startedAtMs, now);
+  const deadline = startedAtMs + timeoutMs;
   let attempts = 0;
   let latest: unknown = null;
   let nextPollAfterMs = intervalMs ?? POLL_BACKOFF_MS[0];
@@ -71,7 +87,7 @@ async function pollPath(
     const timeoutMs = Math.max(1, deadline - Date.now());
     let response;
     try {
-      response = await client.request({ method: 'GET', path, timeoutMs });
+      response = await client.request({ method: "GET", path, timeoutMs });
     } catch (error) {
       if (error instanceof TheHogApiError && error.status === 429) {
         nextPollAfterMs = Math.max(
@@ -79,7 +95,7 @@ async function pollPath(
           error.retryAfterMs ?? DEFAULT_RATE_LIMIT_BACKOFF_MS,
         );
         latest = {
-          status: 'rate_limited',
+          status: "rate_limited",
           error: {
             status: 429,
             message: error.message,
@@ -87,10 +103,7 @@ async function pollPath(
             retryAfterSeconds: Math.ceil(nextPollAfterMs / 1_000),
           },
         };
-        await sleepUntilDeadline(
-          nextPollAfterMs,
-          deadline,
-        );
+        await sleepUntilDeadline(nextPollAfterMs, deadline);
         continue;
       }
       throw error;
@@ -107,8 +120,16 @@ async function pollPath(
   return { final: latest, timedOut: true, attempts, nextPollAfterMs };
 }
 
-function finiteNumberOrDefault(value: number | undefined, fallback: number): number {
-  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+function finiteNumberOrDefault(
+  value: number | undefined,
+  fallback: number,
+): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function finiteStartedAtMs(value: number | undefined, now: number): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) return now;
+  return Math.min(value, now);
 }
 
 export function pollBackoffMsForAttempt(attempts: number): number {

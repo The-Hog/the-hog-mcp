@@ -1,22 +1,26 @@
-import { z } from 'zod/v4';
-import { idempotencyField, jsonObjectSchema, waitFields } from '../schemas.js';
-import { endpointTool, omitControlFields } from './endpoint-tool.js';
-import type { PrimitiveToolDefinition, ToolInput } from './types.js';
+import { z } from "zod/v4";
+import {
+  asyncControlFields,
+  idempotencyField,
+  jsonObjectSchema,
+} from "../schemas.js";
+import { endpointTool, omitControlFields } from "./endpoint-tool.js";
+import type { PrimitiveToolDefinition, ToolInput } from "./types.js";
 
 const webScrapeFormatSchema = z.enum([
-  'text',
-  'markdown',
-  'html',
-  'links',
-  'metadata',
-  'json',
+  "text",
+  "markdown",
+  "html",
+  "links",
+  "metadata",
+  "json",
 ]);
 
 const webScrapeFormatsSchema = z
   .array(webScrapeFormatSchema)
   .min(1)
   .refine((formats) => new Set(formats).size === formats.length, {
-    message: 'formats must not contain duplicates.',
+    message: "formats must not contain duplicates.",
   })
   .optional()
   .describe(
@@ -25,17 +29,17 @@ const webScrapeFormatsSchema = z
 
 export const webPrimitiveTools: PrimitiveToolDefinition[] = [
   endpointTool({
-    name: 'search_web',
+    name: "search_web",
     description:
-      'Search the web and return normalized results. Use this for current web discovery. This may consume The Hog credits.',
-    method: 'POST',
-    path: '/api/v1/platform/scrapers/web/search',
-    endpointPath: '/api/v1/platform/scrapers/web/search',
+      "Search the web and return normalized results. Use this for current web discovery. This may consume The Hog credits.",
+    method: "POST",
+    path: "/api/v1/platform/scrapers/web/search",
+    endpointPath: "/api/v1/platform/scrapers/web/search",
     inputSchema: {
       query: z.string().min(1),
       maxResults: z.number().int().min(1).max(50).optional(),
-      searchDepth: z.enum(['basic', 'advanced']).optional(),
-      topic: z.enum(['general', 'news']).optional(),
+      searchDepth: z.enum(["basic", "advanced"]).optional(),
+      topic: z.enum(["general", "news"]).optional(),
       days: z.number().int().min(1).optional(),
       includeDomains: z.array(z.string().min(1)).optional(),
       excludeDomains: z.array(z.string().min(1)).optional(),
@@ -45,12 +49,12 @@ export const webPrimitiveTools: PrimitiveToolDefinition[] = [
     openWorld: true,
   }),
   endpointTool({
-    name: 'crawl_website',
+    name: "crawl_website",
     description:
-      'Crawl a website and return normalized page content. Use this when the user needs content from multiple pages on a site. This may consume The Hog credits; defaults are bounded for agent use.',
-    method: 'POST',
-    path: '/api/v1/platform/scrapers/web/crawl',
-    endpointPath: '/api/v1/platform/scrapers/web/crawl',
+      "Crawl a website and return normalized page content. Use this when the user needs content from multiple pages on a site. This may consume The Hog credits; defaults are bounded for agent use.",
+    method: "POST",
+    path: "/api/v1/platform/scrapers/web/crawl",
+    endpointPath: "/api/v1/platform/scrapers/web/crawl",
     inputSchema: {
       url: z.string().min(1),
       limit: z.number().int().min(1).max(50).optional(),
@@ -61,12 +65,12 @@ export const webPrimitiveTools: PrimitiveToolDefinition[] = [
     openWorld: true,
   }),
   endpointTool({
-    name: 'scrape_web_page',
+    name: "scrape_web_page",
     description:
-      'Scrape a single web page and return requested content formats such as text, markdown, HTML, links, metadata, or schema-guided JSON. Use this when the user needs one URL. This may consume The Hog credits and large responses are trimmed for MCP clients.',
-    method: 'POST',
-    path: '/api/v1/platform/scrapers/web/scrape',
-    endpointPath: '/api/v1/platform/scrapers/web/scrape',
+      "Scrape a single web page and return requested content formats such as text, markdown, HTML, links, metadata, or schema-guided JSON. Use this when the user needs one URL. This may consume The Hog credits and large responses are trimmed for MCP clients.",
+    method: "POST",
+    path: "/api/v1/platform/scrapers/web/scrape",
+    endpointPath: "/api/v1/platform/scrapers/web/scrape",
     inputSchema: {
       url: z.string().min(1),
       renderJs: z.boolean().optional(),
@@ -81,22 +85,29 @@ export const webPrimitiveTools: PrimitiveToolDefinition[] = [
         .min(1)
         .max(8000)
         .optional()
-        .describe('Extra extraction instructions used only with formats including "json".'),
-      maxAgeMs: z.number().int().min(0).max(30 * 24 * 60 * 60 * 1000).optional(),
+        .describe(
+          'Extra extraction instructions used only with formats including "json".',
+        ),
+      maxAgeMs: z
+        .number()
+        .int()
+        .min(0)
+        .max(30 * 24 * 60 * 60 * 1000)
+        .optional(),
       maxAgeDays: z.number().int().min(0).max(30).optional(),
       ...idempotencyField,
     },
-    body: scrapeWebPageBodyFor('scrape_web_page'),
+    body: scrapeWebPageBodyFor("scrape_web_page"),
     idempotent: true,
     openWorld: true,
   }),
   endpointTool({
-    name: 'submit_web_scrape_job',
+    name: "submit_web_scrape_job",
     description:
-      'Queue an async browser scrape for dynamic or long pages. Use this when a normal scrape is not enough and the user can poll the returned operation. This may consume The Hog credits.',
-    method: 'POST',
-    path: '/api/v1/platform/scrapers/web/scrape/jobs',
-    endpointPath: '/api/v1/platform/scrapers/web/scrape/jobs',
+      "Queue an async browser scrape for dynamic or long pages. Use this when a normal scrape is not enough and the user can poll the returned operation. This may consume The Hog credits.",
+    method: "POST",
+    path: "/api/v1/platform/scrapers/web/scrape/jobs",
+    endpointPath: "/api/v1/platform/scrapers/web/scrape/jobs",
     inputSchema: {
       url: z.string().min(1),
       formats: webScrapeFormatsSchema,
@@ -110,34 +121,45 @@ export const webPrimitiveTools: PrimitiveToolDefinition[] = [
         .min(1)
         .max(8000)
         .optional()
-        .describe('Extra extraction instructions used only with formats including "json".'),
-      maxAgeMs: z.number().int().min(0).max(30 * 24 * 60 * 60 * 1000).optional(),
+        .describe(
+          'Extra extraction instructions used only with formats including "json".',
+        ),
+      maxAgeMs: z
+        .number()
+        .int()
+        .min(0)
+        .max(30 * 24 * 60 * 60 * 1000)
+        .optional(),
       maxDurationMs: z.number().int().min(5000).max(600000).optional(),
       maxScrolls: z.number().int().min(0).max(200).optional(),
       scrollWaitMs: z.number().int().min(100).max(5000).optional(),
       contentStableRounds: z.number().int().min(1).max(20).optional(),
       expandClickableContent: z.boolean().optional(),
       maxExpansionClicks: z.number().int().min(0).max(200).optional(),
-      ...waitFields,
-      ...idempotencyField,
+      ...asyncControlFields,
     },
-    body: scrapeWebPageBodyFor('submit_web_scrape_job'),
+    body: scrapeWebPageBodyFor("submit_web_scrape_job"),
     idempotent: true,
-    poll: 'operation',
+    poll: "operation",
     openWorld: true,
   }),
   endpointTool({
-    name: 'scrape_web_pages',
+    name: "scrape_web_pages",
     description:
-      'Scrape multiple web pages in one bounded batch. Use this when the user needs readable content from several URLs. This may consume The Hog credits.',
-    method: 'POST',
-    path: '/api/v1/platform/scrapers/web/scrape/batch',
-    endpointPath: '/api/v1/platform/scrapers/web/scrape/batch',
+      "Scrape multiple web pages in one bounded batch. Use this when the user needs readable content from several URLs. This may consume The Hog credits.",
+    method: "POST",
+    path: "/api/v1/platform/scrapers/web/scrape/batch",
+    endpointPath: "/api/v1/platform/scrapers/web/scrape/batch",
     inputSchema: {
       urls: z.array(z.string().min(1)).optional(),
       items: z.array(z.record(z.string(), z.unknown())).optional(),
       renderJs: z.boolean().optional(),
-      maxAgeMs: z.number().int().min(0).max(30 * 24 * 60 * 60 * 1000).optional(),
+      maxAgeMs: z
+        .number()
+        .int()
+        .min(0)
+        .max(30 * 24 * 60 * 60 * 1000)
+        .optional(),
       maxAgeDays: z.number().int().min(0).max(30).optional(),
       maxConcurrency: z.number().int().min(1).max(10).optional(),
       ...idempotencyField,
@@ -147,12 +169,12 @@ export const webPrimitiveTools: PrimitiveToolDefinition[] = [
     openWorld: true,
   }),
   endpointTool({
-    name: 'detect_image_deepfake',
+    name: "detect_image_deepfake",
     description:
-      'Analyze a public image URL for generated or manipulated-image signals. This may consume The Hog credits.',
-    method: 'POST',
-    path: '/api/v1/platform/scrapers/image/deepfake-detection',
-    endpointPath: '/api/v1/platform/scrapers/image/deepfake-detection',
+      "Analyze a public image URL for generated or manipulated-image signals. This may consume The Hog credits.",
+    method: "POST",
+    path: "/api/v1/platform/scrapers/image/deepfake-detection",
+    endpointPath: "/api/v1/platform/scrapers/image/deepfake-detection",
     inputSchema: {
       url: z.string().min(1).max(4096),
       ...idempotencyField,
@@ -173,7 +195,7 @@ function scrapeWebPageBody(
 ): Record<string, unknown> {
   const body = omitControlFields(input);
   const formats = Array.isArray(body.formats) ? body.formats : [];
-  const wantsJson = formats.includes('json');
+  const wantsJson = formats.includes("json");
   if (wantsJson && body.jsonSchema === undefined) {
     throw new Error(`${toolName} formats including json require jsonSchema.`);
   }
@@ -193,7 +215,7 @@ function scrapeWebPagesBody(input: ToolInput): Record<string, unknown> {
   const urls = Array.isArray(body.urls) ? body.urls : [];
   const items = Array.isArray(body.items) ? body.items : [];
   if (urls.length === 0 && items.length === 0) {
-    throw new Error('scrape_web_pages requires at least one url or item.');
+    throw new Error("scrape_web_pages requires at least one url or item.");
   }
   return body;
 }

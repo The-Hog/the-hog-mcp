@@ -1,21 +1,23 @@
-import { normalizeError } from '../../client/errors.js';
+import { normalizeError } from "../../client/errors.js";
 import {
   DEEP_RESEARCH_MAX_INLINE_WAIT_SECONDS,
+  MAX_INLINE_WAIT_SECONDS,
   pollEnrichment,
   pollOperation,
-} from '../../client/polling.js';
-import { stableIdempotencyKey } from '../../client/idempotency.js';
+} from "../../client/polling.js";
+import { stableIdempotencyKey } from "../../client/idempotency.js";
+import { isTerminalStatus, readStatus } from "../../client/operation-status.js";
 import type {
   HttpMethod,
   TheHogRequest,
   TheHogToolClient,
-} from '../../client/thehog-client.js';
-import { readAsyncId } from '../primitives/endpoint-tool.js';
-import { asyncContinuation } from '../async-continuation.js';
-import type { ToolInput } from '../types.js';
-import type { WorkflowContext, WorkflowStepResult } from './types.js';
+} from "../../client/thehog-client.js";
+import { readAsyncId } from "../primitives/endpoint-tool.js";
+import { asyncContinuation } from "../async-continuation.js";
+import type { ToolInput } from "../types.js";
+import type { WorkflowContext, WorkflowStepResult } from "./types.js";
 
-export type WorkflowPollKind = 'operation' | 'enrichment';
+export type WorkflowPollKind = "operation" | "enrichment";
 
 export interface WorkflowRequestOptions {
   step: string;
@@ -27,6 +29,7 @@ export interface WorkflowRequestOptions {
   poll?: WorkflowPollKind;
   waitForResult?: boolean;
   timeoutSeconds?: number;
+  correlationKey?: string;
 }
 
 export function createWorkflowContext(name: string): WorkflowContext {
@@ -38,9 +41,12 @@ export function createWorkflowContext(name: string): WorkflowContext {
   };
 }
 
-export function workflowStatus(ctx: WorkflowContext, completedSteps: number): string {
-  if (completedSteps === 0) return 'failed';
-  return ctx.warnings.length > 0 ? 'partial_success' : 'success';
+export function workflowStatus(
+  ctx: WorkflowContext,
+  completedSteps: number,
+): string {
+  if (completedSteps === 0) return "failed";
+  return ctx.warnings.length > 0 ? "partial_success" : "success";
 }
 
 export async function requestWorkflowStep(
@@ -48,19 +54,24 @@ export async function requestWorkflowStep(
   ctx: WorkflowContext,
   options: WorkflowRequestOptions,
 ): Promise<WorkflowStepResult> {
+  const startedAtMs = Date.now();
   const request: TheHogRequest = {
     method: options.method,
     path: options.path,
     query: options.query,
     body: options.body,
     idempotencyKey: options.idempotencyKey,
+    ...(options.poll && options.waitForResult !== false
+      ? { timeoutMs: inlineRequestTimeoutMs(options.timeoutSeconds) }
+      : {}),
   };
   const response = await client.request(request);
   if (response.requestId) {
     ctx.requestIds.push(response.requestId);
   }
+  const correlationKey = readWorkflowCorrelationKey(options);
 
-  const operationId = readAsyncId(response.data, 'operation');
+  const operationId = readAsyncId(response.data, "operation");
   if (operationId) {
     ctx.childOperationIds.push(operationId);
   }
@@ -68,11 +79,11 @@ export async function requestWorkflowStep(
 
   if (options.poll && options.waitForResult !== false && asyncId) {
     const pollOptions =
-      typeof options.timeoutSeconds === 'number'
-        ? { timeoutSeconds: options.timeoutSeconds }
-        : {};
+      typeof options.timeoutSeconds === "number"
+        ? { timeoutSeconds: options.timeoutSeconds, startedAtMs }
+        : { startedAtMs };
     const pollResult =
-      options.poll === 'enrichment'
+      options.poll === "enrichment"
         ? await pollEnrichment(client, asyncId, pollOptions)
         : await pollOperation(client, asyncId, pollOptions);
     return {
@@ -84,6 +95,8 @@ export async function requestWorkflowStep(
       timedOut: pollResult.timedOut,
       pollAttempts: pollResult.attempts,
       nextPollAfterMs: pollResult.nextPollAfterMs,
+      idempotencyKey: options.idempotencyKey ?? null,
+      correlationKey,
     };
   }
 
@@ -93,6 +106,8 @@ export async function requestWorkflowStep(
     requestId: response.requestId,
     asyncId,
     pollCompleted: false,
+    idempotencyKey: options.idempotencyKey ?? null,
+    correlationKey,
   };
 }
 
@@ -106,12 +121,12 @@ export async function runWorkflowStep(
     if (result.timedOut) {
       const asyncId = result.asyncId;
       const resumeTool =
-        options.poll === 'enrichment' ? 'get_enrichment' : 'get_operation';
+        options.poll === "enrichment" ? "get_enrichment" : "get_operation";
       if (!asyncId) {
         ctx.warnings.push({
           step: options.step,
           message:
-            'Timed out while waiting for this step, but it is still processing on the server.',
+            "Timed out while waiting for this step, but it is still processing on the server.",
         });
         return result;
       }
@@ -124,16 +139,22 @@ export async function runWorkflowStep(
           `the result once it is ready; re-attaching does not consume additional credits. ` +
           `Do not re-issue this call, which would start new work and incur new credits.`,
         asyncId,
-        status: 'still_running' as const,
+        status: "still_running" as const,
         nextTool: resumeTool,
         nextInput: { id: asyncId },
+        ...(result.idempotencyKey
+          ? { idempotencyKey: result.idempotencyKey }
+          : {}),
+        ...(result.correlationKey
+          ? { correlationKey: result.correlationKey }
+          : {}),
       });
     }
     return result;
   } catch (error) {
     ctx.warnings.push({
       step: options.step,
-      message: 'The workflow could not complete this step.',
+      message: "The workflow could not complete this step.",
       error: normalizeError(error),
     });
     return null;
@@ -145,7 +166,9 @@ export function waitForResult(input: ToolInput): boolean {
 }
 
 export function timeoutSeconds(input: ToolInput): number | undefined {
-  return typeof input.timeoutSeconds === 'number' ? input.timeoutSeconds : undefined;
+  return typeof input.timeoutSeconds === "number"
+    ? input.timeoutSeconds
+    : undefined;
 }
 
 export function workflowIdempotencyKey(
@@ -154,7 +177,7 @@ export function workflowIdempotencyKey(
   workflowName: string,
   step: string,
 ): string {
-  if (typeof input.idempotencyKey === 'string' && input.idempotencyKey.trim()) {
+  if (typeof input.idempotencyKey === "string" && input.idempotencyKey.trim()) {
     const suffix = `_${workflowName}_${step}`;
     const clean = input.idempotencyKey.trim();
     return `${clean.slice(0, Math.max(1, 256 - suffix.length))}${suffix}`;
@@ -167,13 +190,16 @@ export function workflowIdempotencyKey(
   });
 }
 
-export function omitWorkflowControlFields(input: ToolInput): Record<string, unknown> {
+export function omitWorkflowControlFields(
+  input: ToolInput,
+): Record<string, unknown> {
   const output: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(input)) {
     if (
-      key === 'waitForResult' ||
-      key === 'timeoutSeconds' ||
-      key === 'idempotencyKey'
+      key === "waitForResult" ||
+      key === "timeoutSeconds" ||
+      key === "idempotencyKey" ||
+      key === "correlationKey"
     ) {
       continue;
     }
@@ -182,9 +208,19 @@ export function omitWorkflowControlFields(input: ToolInput): Record<string, unkn
   return output;
 }
 
-export function extractItems(value: unknown, preferredKeys: string[] = []): unknown[] {
+export function extractItems(
+  value: unknown,
+  preferredKeys: string[] = [],
+): unknown[] {
   const queue = unwrapKnownContainers(value);
-  const keys = [...preferredKeys, 'data', 'results', 'items', 'companies', 'people'];
+  const keys = [
+    ...preferredKeys,
+    "data",
+    "results",
+    "items",
+    "companies",
+    "people",
+  ];
   for (const current of queue) {
     if (!isRecord(current)) continue;
     for (const key of keys) {
@@ -208,7 +244,9 @@ export function compactForAnchor(value: unknown, maxChars = 12_000): unknown {
   };
 }
 
-export function uniqueStrings(values: Array<string | null | undefined>): string[] {
+export function uniqueStrings(
+  values: Array<string | null | undefined>,
+): string[] {
   const output: string[] = [];
   const seen = new Set<string>();
   for (const value of values) {
@@ -226,14 +264,17 @@ export function readString(value: unknown, keys: string[]): string | null {
   if (!isRecord(value)) return null;
   for (const key of keys) {
     const child = value[key];
-    if (typeof child === 'string' && child.trim()) {
+    if (typeof child === "string" && child.trim()) {
       return child.trim();
     }
   }
   return null;
 }
 
-export function readNestedString(value: unknown, paths: string[][]): string | null {
+export function readNestedString(
+  value: unknown,
+  paths: string[][],
+): string | null {
   for (const path of paths) {
     let current = value;
     for (const key of path) {
@@ -243,7 +284,7 @@ export function readNestedString(value: unknown, paths: string[][]): string | nu
       }
       current = current[key];
     }
-    if (typeof current === 'string' && current.trim()) {
+    if (typeof current === "string" && current.trim()) {
       return current.trim();
     }
   }
@@ -258,8 +299,14 @@ export function toUrl(value: string): string {
   return `https://${clean}`;
 }
 
-export function clampInt(value: unknown, fallback: number, min: number, max: number): number {
-  const numberValue = typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+export function clampInt(
+  value: unknown,
+  fallback: number,
+  min: number,
+  max: number,
+): number {
+  const numberValue =
+    typeof value === "number" && Number.isFinite(value) ? value : fallback;
   return Math.max(min, Math.min(max, Math.trunc(numberValue)));
 }
 
@@ -282,38 +329,49 @@ export function workflowSummary(
   };
 }
 
-export function pollFields(input: ToolInput): Pick<
+export function pollFields(
+  input: ToolInput,
+): Pick<
   WorkflowRequestOptions,
-  'waitForResult' | 'timeoutSeconds'
+  "waitForResult" | "timeoutSeconds" | "correlationKey"
 > {
   return {
     waitForResult: waitForResult(input),
     timeoutSeconds: timeoutSeconds(input),
+    ...correlationFieldFromInput(input),
   };
 }
 
-export function deepResearchPollFields(input: ToolInput): Pick<
+export function deepResearchPollFields(
+  input: ToolInput,
+): Pick<
   WorkflowRequestOptions,
-  'waitForResult' | 'timeoutSeconds'
+  "waitForResult" | "timeoutSeconds" | "correlationKey"
 > {
   if (input.waitForResult !== true) {
-    return { waitForResult: false };
+    return { waitForResult: false, ...correlationFieldFromInput(input) };
   }
-  const requested = timeoutSeconds(input) ?? DEEP_RESEARCH_MAX_INLINE_WAIT_SECONDS;
+  const requested =
+    timeoutSeconds(input) ?? DEEP_RESEARCH_MAX_INLINE_WAIT_SECONDS;
   return {
     waitForResult: true,
     timeoutSeconds: Math.min(requested, DEEP_RESEARCH_MAX_INLINE_WAIT_SECONDS),
+    ...correlationFieldFromInput(input),
   };
 }
 
-export function enrichmentPollFields(input: ToolInput): Pick<
+export function enrichmentPollFields(
+  input: ToolInput,
+): Pick<
   WorkflowRequestOptions,
-  'waitForResult' | 'timeoutSeconds'
+  "waitForResult" | "timeoutSeconds" | "correlationKey"
 > {
-  const requested = timeoutSeconds(input) ?? DEEP_RESEARCH_MAX_INLINE_WAIT_SECONDS;
+  const requested =
+    timeoutSeconds(input) ?? DEEP_RESEARCH_MAX_INLINE_WAIT_SECONDS;
   return {
     waitForResult: true,
     timeoutSeconds: Math.min(requested, DEEP_RESEARCH_MAX_INLINE_WAIT_SECONDS),
+    ...correlationFieldFromInput(input),
   };
 }
 
@@ -325,7 +383,9 @@ export function pollMetadata(step: WorkflowStepResult | null): {
   return {
     ...(step?.asyncId ? { asyncId: step.asyncId } : {}),
     ...(step?.timedOut !== undefined ? { timedOut: step.timedOut } : {}),
-    ...(step?.pollAttempts !== undefined ? { pollAttempts: step.pollAttempts } : {}),
+    ...(step?.pollAttempts !== undefined
+      ? { pollAttempts: step.pollAttempts }
+      : {}),
   };
 }
 
@@ -341,25 +401,35 @@ export function continuationForStep(
     id: step.asyncId,
     requestId: step.requestId,
     pollAfterMs: step.nextPollAfterMs,
+    idempotencyKey: step.idempotencyKey,
+    correlationKey: step.correlationKey,
   });
 }
 
+function readWorkflowCorrelationKey(
+  options: WorkflowRequestOptions,
+): string | null {
+  return options.correlationKey?.trim() || options.idempotencyKey || null;
+}
+
+function correlationFieldFromInput(
+  input: ToolInput,
+): Pick<WorkflowRequestOptions, "correlationKey"> {
+  return typeof input.correlationKey === "string" && input.correlationKey.trim()
+    ? { correlationKey: input.correlationKey.trim() }
+    : {};
+}
+
 function isTerminalStepStatus(value: unknown): boolean {
-  if (!isRecord(value)) return false;
-  const status = value.status;
-  return (
-    typeof status === 'string' &&
-    [
-      'succeeded',
-      'completed',
-      'complete',
-      'failed',
-      'error',
-      'cancelled',
-      'canceled',
-      'partial_success',
-    ].includes(status.toLowerCase())
-  );
+  return isTerminalStatus(readStatus(value));
+}
+
+function inlineRequestTimeoutMs(value: unknown): number {
+  const seconds =
+    typeof value === "number" && Number.isFinite(value)
+      ? Math.min(value, MAX_INLINE_WAIT_SECONDS)
+      : MAX_INLINE_WAIT_SECONDS;
+  return Math.max(1, seconds) * 1_000;
 }
 
 function unwrapKnownContainers(value: unknown): unknown[] {
@@ -369,13 +439,13 @@ function unwrapKnownContainers(value: unknown): unknown[] {
   while (queue.length > 0) {
     const current = queue.shift();
     if (!current || current.depth > 5) continue;
-    if (current.value && typeof current.value === 'object') {
+    if (current.value && typeof current.value === "object") {
       if (visited.has(current.value)) continue;
       visited.add(current.value);
     }
     output.push(current.value);
     if (!isRecord(current.value)) continue;
-    for (const key of ['final', 'result', 'response', 'data']) {
+    for (const key of ["final", "result", "response", "data"]) {
       if (key in current.value) {
         queue.push({ value: current.value[key], depth: current.depth + 1 });
       }
@@ -385,5 +455,5 @@ function unwrapKnownContainers(value: unknown): unknown[] {
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
