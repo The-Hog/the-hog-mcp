@@ -9,6 +9,7 @@ import { webPrimitiveTools } from './web.js';
 const publicToolNames = [
   'search_companies',
   'search_people',
+  'estimate_people_search',
   'enrich_contact',
   'enrich_contacts',
   'start_deep_research',
@@ -21,6 +22,7 @@ const publicToolNames = [
   'search_web',
   'crawl_website',
   'scrape_web_page',
+  'submit_web_scrape_job',
   'scrape_web_pages',
   'detect_image_deepfake',
   'get_seo_domain_overview',

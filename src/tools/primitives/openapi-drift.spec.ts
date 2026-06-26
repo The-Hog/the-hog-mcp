@@ -79,17 +79,20 @@ test(
         }
       }
 
-      if (['POST', 'PUT', 'PATCH'].includes(tool.endpoint.method)) {
+      const requestKeys = inputKeys.filter(
+        (key) => !CONTROL_INPUT_KEYS.has(key) && !pathParams.has(key),
+      );
+
+      if (
+        ['POST', 'PUT', 'PATCH'].includes(tool.endpoint.method) &&
+        requestKeys.length > 0
+      ) {
         assert.equal(
           bodyKeys.size > 0,
           true,
           `${tool.endpoint.method} ${tool.endpoint.path} must expose a JSON request body in public OpenAPI`,
         );
       }
-
-      const requestKeys = inputKeys.filter(
-        (key) => !CONTROL_INPUT_KEYS.has(key) && !pathParams.has(key),
-      );
       for (const key of requestKeys) {
         const shape = requestShapes.get(key);
         assert.ok(

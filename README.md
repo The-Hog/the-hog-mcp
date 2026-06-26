@@ -298,3 +298,49 @@ MIT
 ## Versioning
 
 The package is in the `0.x` release line while the tool surface stabilizes: patch versions contain compatible fixes, and minor versions may add tools or adjust tool schemas before `1.0.0`.
+
+## Release and Propagation
+
+`The-Hog/the-hog-mcp` is the public npm package repo for `@thehog/mcp`. Its
+default and release branch is `main`; this repo does not currently use `dev` or
+`staging` branches. Feature PRs should target `main` unless the repository
+branch list or workflow files have changed.
+
+Before opening or merging an MCP surface PR:
+
+```bash
+git fetch origin --prune
+git ls-remote --heads origin main dev staging
+gh repo view The-Hog/the-hog-mcp --json defaultBranchRef
+npm test
+THEHOG_OPENAPI_SPEC_PATH=/path/to/the-hog-core-api/mintlify/api-reference/openapi.json npm run test:openapi
+npm run pack:dry-run
+npm audit --omit=dev --audit-level=high
+```
+
+Use `THEHOG_OPENAPI_SPEC_PATH` with a local Core API OpenAPI file when the Core
+API PR has not yet been deployed to public docs. CI and the publish workflow
+download `https://docs.thehog.ai/api-reference/openapi.json`, so they are
+expected to fail if the MCP package exposes a tool or request field before the
+matching Core API docs are live. Do not weaken the OpenAPI drift checks to make
+that pass.
+
+Publishing is manual:
+
+1. Merge the Core API change and deploy the public OpenAPI docs first.
+2. Rerun and green this repo's CI against live docs.
+3. Merge the MCP package PR to `main`.
+4. Run the `Publish` GitHub Actions workflow from `main`, passing
+   `expected_version` when you want the workflow to assert the intended
+   `package.json` version.
+5. Verify npm has the package:
+
+```bash
+npm view @thehog/mcp version
+npm view @thehog/mcp@<version> version
+```
+
+Hosted remote MCP does not automatically use new tools just because this package
+published. After publishing, update `The-Hog/the-hog-remote-mcp` to depend on
+the new `@thehog/mcp` version, then deploy remote MCP through its own staging and
+production workflow.
