@@ -1,6 +1,6 @@
 import { z } from "zod/v4";
 import {
-  MAX_INLINE_WAIT_SECONDS,
+  inlineRequestTimeoutMs,
   pollEnrichment,
   pollOperation,
   pollSearchResult,
@@ -182,14 +182,6 @@ function readPollOptions(
       : {}),
     startedAtMs,
   };
-}
-
-function inlineRequestTimeoutMs(value: unknown): number {
-  const seconds =
-    typeof value === "number" && Number.isFinite(value)
-      ? Math.min(value, MAX_INLINE_WAIT_SECONDS)
-      : MAX_INLINE_WAIT_SECONDS;
-  return Math.max(1, seconds) * 1_000;
 }
 
 function readCorrelationKey(

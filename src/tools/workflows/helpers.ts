@@ -1,7 +1,7 @@
 import { normalizeError } from "../../client/errors.js";
 import {
   DEEP_RESEARCH_MAX_INLINE_WAIT_SECONDS,
-  MAX_INLINE_WAIT_SECONDS,
+  inlineRequestTimeoutMs,
   pollEnrichment,
   pollOperation,
 } from "../../client/polling.js";
@@ -348,6 +348,15 @@ export function deepResearchPollFields(
   WorkflowRequestOptions,
   "waitForResult" | "timeoutSeconds" | "correlationKey"
 > {
+  return asyncFirstPollFields(input);
+}
+
+export function asyncFirstPollFields(
+  input: ToolInput,
+): Pick<
+  WorkflowRequestOptions,
+  "waitForResult" | "timeoutSeconds" | "correlationKey"
+> {
   if (input.waitForResult !== true) {
     return { waitForResult: false, ...correlationFieldFromInput(input) };
   }
@@ -422,14 +431,6 @@ function correlationFieldFromInput(
 
 function isTerminalStepStatus(value: unknown): boolean {
   return isTerminalStatus(readStatus(value));
-}
-
-function inlineRequestTimeoutMs(value: unknown): number {
-  const seconds =
-    typeof value === "number" && Number.isFinite(value)
-      ? Math.min(value, MAX_INLINE_WAIT_SECONDS)
-      : MAX_INLINE_WAIT_SECONDS;
-  return Math.max(1, seconds) * 1_000;
 }
 
 function unwrapKnownContainers(value: unknown): unknown[] {

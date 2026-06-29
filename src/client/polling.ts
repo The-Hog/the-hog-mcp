@@ -23,6 +23,14 @@ export const DEEP_RESEARCH_MAX_INLINE_WAIT_SECONDS = MAX_INLINE_WAIT_SECONDS;
 
 const DEFAULT_TIMEOUT_SECONDS = MAX_INLINE_WAIT_SECONDS;
 
+export function inlineRequestTimeoutMs(value: unknown): number {
+  const seconds =
+    typeof value === "number" && Number.isFinite(value)
+      ? Math.min(value, MAX_INLINE_WAIT_SECONDS)
+      : MAX_INLINE_WAIT_SECONDS;
+  return Math.max(1, seconds) * 1_000;
+}
+
 export async function pollOperation(
   client: TheHogToolClient,
   operationId: string,

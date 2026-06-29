@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { z } from "zod/v4";
 import {
+  asyncFirstPollFields,
   continuationForStep,
   createWorkflowContext,
   deepResearchPollFields,
@@ -30,6 +31,17 @@ test("deepResearchPollFields clamps the opt-in wait to 50s", () => {
   assert.deepEqual(
     deepResearchPollFields({ waitForResult: true, timeoutSeconds: 20 }),
     { waitForResult: true, timeoutSeconds: 20 },
+  );
+});
+
+test("asyncFirstPollFields returns a continuation unless inline wait is explicit", () => {
+  assert.deepEqual(asyncFirstPollFields({}), { waitForResult: false });
+  assert.deepEqual(asyncFirstPollFields({ waitForResult: false }), {
+    waitForResult: false,
+  });
+  assert.deepEqual(
+    asyncFirstPollFields({ waitForResult: true, timeoutSeconds: 600 }),
+    { waitForResult: true, timeoutSeconds: 50 },
   );
 });
 

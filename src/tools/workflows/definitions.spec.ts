@@ -687,6 +687,45 @@ test("workflow sub-step idempotency keys are stable when omitted", async () => {
   );
 });
 
+test("enrich prospect list returns an async continuation by default", async () => {
+  const tool = workflowTools.find(
+    (candidate) => candidate.name === "enrich_prospect_list",
+  );
+  assert.ok(tool);
+
+  const requests: FakeRequest[] = [];
+  const result = await tool.execute(
+    {
+      identifiers: [{ email: "ada@example.com" }],
+      fields: ["contact.email"],
+    },
+    fakeClient(async (request) => {
+      requests.push(request);
+      if (request.method === "POST" && request.path === "/api/enrichments") {
+        return {
+          data: { id: "enrich_1", status: "queued" },
+          status: 202,
+          requestId: "req_enrich",
+        };
+      }
+      throw new Error(`Unexpected request ${request.method} ${request.path}`);
+    }),
+  );
+
+  assert.equal(requests.length, 1);
+  assert.equal("timeoutMs" in (requests[0] as Record<string, unknown>), false);
+  assert.deepEqual(
+    (requests[0]?.body as { identifiers?: unknown }).identifiers,
+    [{ email: "ada@example.com" }],
+  );
+  assert.equal((result as { status: string }).status, "still_running");
+  assert.equal((result as { enrichmentId: string }).enrichmentId, "enrich_1");
+  assert.equal((result as { nextTool: string }).nextTool, "get_enrichment");
+  assert.deepEqual((result as { nextInput: unknown }).nextInput, {
+    id: "enrich_1",
+  });
+});
+
 test("scrape and extract only starts deep research when extraction is requested", async () => {
   const tool = workflowTools.find(
     (candidate) => candidate.name === "scrape_and_extract",

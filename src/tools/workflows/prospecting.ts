@@ -11,6 +11,7 @@ import {
   type WorkflowToolDefinition,
 } from "./types.js";
 import {
+  asyncFirstPollFields,
   clampInt,
   continuationForStep,
   createWorkflowContext,
@@ -354,7 +355,7 @@ async function enrichProspectList(input: ToolInput, client: TheHogToolClient) {
       "enrichment",
     ),
     poll: "enrichment",
-    ...pollFields(input),
+    ...asyncFirstPollFields(input),
   });
   const enrichmentContinuation = continuationForStep(
     enrichmentStep,
