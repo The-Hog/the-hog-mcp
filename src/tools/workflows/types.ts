@@ -1,5 +1,5 @@
-import type { McpToolDefinition } from '../types.js';
-import type { ToolAnnotations } from '@modelcontextprotocol/sdk/types.js';
+import type { McpToolDefinition } from "../types.js";
+import type { ToolAnnotations } from "@modelcontextprotocol/sdk/types.js";
 
 export type WorkflowToolDefinition = McpToolDefinition;
 
@@ -14,9 +14,11 @@ export interface WorkflowWarning {
   step: string;
   message: string;
   asyncId?: string;
-  status?: 'still_running';
+  status?: "still_running";
   nextTool?: string;
   nextInput?: Record<string, unknown>;
+  idempotencyKey?: string;
+  correlationKey?: string;
   error?: Record<string, unknown>;
 }
 
@@ -29,6 +31,8 @@ export interface WorkflowStepResult {
   timedOut?: boolean;
   pollAttempts?: number;
   nextPollAfterMs?: number;
+  idempotencyKey?: string | null;
+  correlationKey?: string | null;
 }
 
 export interface WorkflowContext {

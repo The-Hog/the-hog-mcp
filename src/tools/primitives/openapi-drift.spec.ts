@@ -1,37 +1,42 @@
-import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
-import test from 'node:test';
-import { primitiveTools } from './definitions.js';
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import test from "node:test";
+import { primitiveTools } from "./definitions.js";
 
-const PUBLIC_OPENAPI_URL = 'https://docs.thehog.ai/api-reference/openapi.json';
+const PUBLIC_OPENAPI_URL = "https://docs.thehog.ai/api-reference/openapi.json";
 const OPENAPI_DRIFT_ENABLED =
-  process.env.THEHOG_RUN_OPENAPI_DRIFT === '1' ||
-  Boolean(process.env.THEHOG_OPENAPI_SPEC_PATH || process.env.THEHOG_OPENAPI_SPEC_URL);
+  process.env.THEHOG_RUN_OPENAPI_DRIFT === "1" ||
+  Boolean(
+    process.env.THEHOG_OPENAPI_SPEC_PATH || process.env.THEHOG_OPENAPI_SPEC_URL,
+  );
 const OPENAPI_SKIP_REASON =
-  'Set THEHOG_RUN_OPENAPI_DRIFT=1 to run live OpenAPI drift checks.';
+  "Set THEHOG_RUN_OPENAPI_DRIFT=1 to run live OpenAPI drift checks.";
 const CONTROL_INPUT_KEYS = new Set([
-  'waitForResult',
-  'timeoutSeconds',
-  'idempotencyKey',
-  'confirm',
+  "waitForResult",
+  "timeoutSeconds",
+  "idempotencyKey",
+  "correlationKey",
+  "confirm",
 ]);
 
 test(
-  'primitive tools match the public OpenAPI operation allowlist',
+  "primitive tools match the public OpenAPI operation allowlist",
   { skip: OPENAPI_DRIFT_ENABLED ? false : OPENAPI_SKIP_REASON },
   async () => {
     const spec = await loadPublicOpenApi();
     const publicOperations = new Set<string>();
     for (const [path, pathItem] of Object.entries(spec.paths)) {
       for (const method of Object.keys(pathItem)) {
-        if (['get', 'post', 'put', 'patch', 'delete'].includes(method)) {
+        if (["get", "post", "put", "patch", "delete"].includes(method)) {
           publicOperations.add(`${method.toUpperCase()} ${path}`);
         }
       }
     }
 
     const toolOperations = new Set(
-      primitiveTools.map((tool) => `${tool.endpoint.method} ${tool.endpoint.path}`),
+      primitiveTools.map(
+        (tool) => `${tool.endpoint.method} ${tool.endpoint.path}`,
+      ),
     );
 
     assert.deepEqual([...toolOperations].sort(), [...publicOperations].sort());
@@ -39,17 +44,21 @@ test(
 );
 
 test(
-  'primitive tool request inputs match the public OpenAPI request shapes',
+  "primitive tool request inputs match the public OpenAPI request shapes",
   { skip: OPENAPI_DRIFT_ENABLED ? false : OPENAPI_SKIP_REASON },
   async () => {
     const spec = await loadPublicOpenApi();
 
     for (const tool of primitiveTools) {
-      const operation = readOperation(spec, tool.endpoint.method, tool.endpoint.path);
-      const pathParams = parameterNames(operation, 'path');
-      const queryParams = parameterNames(operation, 'query');
+      const operation = readOperation(
+        spec,
+        tool.endpoint.method,
+        tool.endpoint.path,
+      );
+      const pathParams = parameterNames(operation, "path");
+      const queryParams = parameterNames(operation, "query");
       const requestShapes = requestShapeByName(spec, operation);
-      const bodyKeys = namesForLocation(requestShapes, 'body');
+      const bodyKeys = namesForLocation(requestShapes, "body");
       const inputKeys = Object.keys(tool.inputSchema);
 
       assert.equal(
@@ -84,7 +93,7 @@ test(
       );
 
       if (
-        ['POST', 'PUT', 'PATCH'].includes(tool.endpoint.method) &&
+        ["POST", "PUT", "PATCH"].includes(tool.endpoint.method) &&
         requestKeys.length > 0
       ) {
         assert.equal(
@@ -99,7 +108,12 @@ test(
           shape,
           `${tool.name} input ${key} must exist in OpenAPI request body or query parameters`,
         );
-        assertCompatibleSchema(tool.name, key, tool.inputSchema[key], shape.schema);
+        assertCompatibleSchema(
+          tool.name,
+          key,
+          tool.inputSchema[key],
+          shape.schema,
+        );
       }
     }
   },
@@ -108,7 +122,7 @@ test(
 async function loadPublicOpenApi(): Promise<OpenApiSpec> {
   if (process.env.THEHOG_OPENAPI_SPEC_PATH) {
     return JSON.parse(
-      await readFile(process.env.THEHOG_OPENAPI_SPEC_PATH, 'utf8'),
+      await readFile(process.env.THEHOG_OPENAPI_SPEC_PATH, "utf8"),
     ) as OpenApiSpec;
   }
   const url = process.env.THEHOG_OPENAPI_SPEC_URL ?? PUBLIC_OPENAPI_URL;
@@ -129,7 +143,10 @@ function readOperation(
   return operation;
 }
 
-function parameterNames(operation: OpenApiOperation, location: OpenApiParameterLocation): Set<string> {
+function parameterNames(
+  operation: OpenApiOperation,
+  location: OpenApiParameterLocation,
+): Set<string> {
   return new Set(
     (operation.parameters ?? [])
       .filter((parameter) => parameter.in === location)
@@ -143,22 +160,24 @@ function requestShapeByName(
 ): Map<string, RequestShape> {
   const shapes = new Map<string, RequestShape>();
   for (const parameter of operation.parameters ?? []) {
-    if (parameter.in === 'path' || parameter.in === 'query') {
+    if (parameter.in === "path" || parameter.in === "query") {
       shapes.set(parameter.name, {
         location: parameter.in,
-        required: parameter.required === true || parameter.in === 'path',
+        required: parameter.required === true || parameter.in === "path",
         schema: parameter.schema ?? {},
       });
     }
   }
 
-  const schema = operation.requestBody?.content?.['application/json']?.schema;
+  const schema = operation.requestBody?.content?.["application/json"]?.schema;
   if (schema) {
     const bodySchema = resolveSchema(spec, schema, new Set());
     const required = new Set(bodySchema.required ?? []);
-    for (const [name, propertySchema] of Object.entries(bodySchema.properties ?? {})) {
+    for (const [name, propertySchema] of Object.entries(
+      bodySchema.properties ?? {},
+    )) {
       shapes.set(name, {
-        location: 'body',
+        location: "body",
         required: required.has(name),
         schema: propertySchema,
       });
@@ -169,7 +188,7 @@ function requestShapeByName(
       ...(bodySchema.oneOf ?? []),
     ]) {
       for (const [name, shape] of requestShapeByName(spec, {
-        requestBody: { content: { 'application/json': { schema: variant } } },
+        requestBody: { content: { "application/json": { schema: variant } } },
       })) {
         shapes.set(name, shape);
       }
@@ -198,8 +217,12 @@ function resolveSchema(
   if (!schema.$ref) return schema;
   if (seen.has(schema.$ref)) return {};
   seen.add(schema.$ref);
-  const schemaName = schema.$ref.replace('#/components/schemas/', '');
-  return resolveSchema(spec, spec.components?.schemas?.[schemaName] ?? {}, seen);
+  const schemaName = schema.$ref.replace("#/components/schemas/", "");
+  return resolveSchema(
+    spec,
+    spec.components?.schemas?.[schemaName] ?? {},
+    seen,
+  );
 }
 
 function assertCompatibleSchema(
@@ -214,7 +237,7 @@ function assertCompatibleSchema(
     assert.equal(
       intersects(zodShape.types, openApiShape.types),
       true,
-      `${toolName} input ${key} type ${[...zodShape.types].join('|')} must be compatible with OpenAPI type ${[...openApiShape.types].join('|')}`,
+      `${toolName} input ${key} type ${[...zodShape.types].join("|")} must be compatible with OpenAPI type ${[...openApiShape.types].join("|")}`,
     );
   }
   if (openApiShape.enumValues.length > 0 && zodShape.enumValues.length > 0) {
@@ -234,9 +257,9 @@ function readOpenApiShape(schema: OpenApiSchema): SchemaShape {
       ? [schema.type]
       : [];
   for (const type of rawTypes) {
-    if (type === 'integer') {
-      types.add('number');
-    } else if (type !== 'null') {
+    if (type === "integer") {
+      types.add("number");
+    } else if (type !== "null") {
       types.add(type);
     }
   }
@@ -244,7 +267,7 @@ function readOpenApiShape(schema: OpenApiSchema): SchemaShape {
     types,
     enumValues: (schema.enum ?? []).filter(
       (value): value is string | number | boolean =>
-        ['string', 'number', 'boolean'].includes(typeof value),
+        ["string", "number", "boolean"].includes(typeof value),
     ),
   };
 }
@@ -253,36 +276,36 @@ function readZodShape(schema: unknown): SchemaShape {
   const inner = unwrapZod(schema);
   const def = zodDef(inner);
   switch (def?.type) {
-    case 'string':
-      return { types: new Set(['string']), enumValues: [] };
-    case 'number':
-      return { types: new Set(['number']), enumValues: [] };
-    case 'boolean':
-      return { types: new Set(['boolean']), enumValues: [] };
-    case 'array':
-      return { types: new Set(['array']), enumValues: [] };
-    case 'object':
-    case 'record':
-      return { types: new Set(['object']), enumValues: [] };
-    case 'enum':
+    case "string":
+      return { types: new Set(["string"]), enumValues: [] };
+    case "number":
+      return { types: new Set(["number"]), enumValues: [] };
+    case "boolean":
+      return { types: new Set(["boolean"]), enumValues: [] };
+    case "array":
+      return { types: new Set(["array"]), enumValues: [] };
+    case "object":
+    case "record":
+      return { types: new Set(["object"]), enumValues: [] };
+    case "enum":
       return {
-        types: new Set(['string']),
+        types: new Set(["string"]),
         enumValues: Object.values(def.entries ?? {}).filter(
           (value): value is string | number | boolean =>
-            ['string', 'number', 'boolean'].includes(typeof value),
+            ["string", "number", "boolean"].includes(typeof value),
         ),
       };
-    case 'literal': {
+    case "literal": {
       const values = (def.values ?? []).filter(
         (value): value is string | number | boolean =>
-          ['string', 'number', 'boolean'].includes(typeof value),
+          ["string", "number", "boolean"].includes(typeof value),
       );
       return {
         types: new Set(values.map((value) => typeof value)),
         enumValues: values,
       };
     }
-    case 'unknown':
+    case "unknown":
       return { types: new Set(), enumValues: [] };
     default:
       return { types: new Set(), enumValues: [] };
@@ -294,10 +317,10 @@ function unwrapZod(schema: unknown): unknown {
   for (let index = 0; index < 8; index += 1) {
     const def = zodDef(current);
     if (
-      def?.type === 'optional' ||
-      def?.type === 'nullable' ||
-      def?.type === 'default' ||
-      def?.type === 'catch'
+      def?.type === "optional" ||
+      def?.type === "nullable" ||
+      def?.type === "default" ||
+      def?.type === "catch"
     ) {
       current = def.innerType;
       continue;
@@ -308,7 +331,7 @@ function unwrapZod(schema: unknown): unknown {
 }
 
 function zodDef(schema: unknown): ZodDef | null {
-  if (!schema || typeof schema !== 'object') {
+  if (!schema || typeof schema !== "object") {
     return null;
   }
   const candidate = schema as { _def?: ZodDef; def?: ZodDef };
@@ -340,14 +363,14 @@ interface OpenApiOperation {
   }>;
   requestBody?: {
     content?: {
-      'application/json'?: {
+      "application/json"?: {
         schema?: OpenApiSchema;
       };
     };
   };
 }
 
-type OpenApiParameterLocation = 'path' | 'query' | 'header' | 'cookie' | 'body';
+type OpenApiParameterLocation = "path" | "query" | "header" | "cookie" | "body";
 
 interface OpenApiSchema {
   $ref?: string;

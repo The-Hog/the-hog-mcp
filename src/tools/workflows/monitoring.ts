@@ -1,12 +1,11 @@
-import { z } from 'zod/v4';
-import type { TheHogToolClient } from '../../client/thehog-client.js';
+import { z } from "zod/v4";
+import type { TheHogToolClient } from "../../client/thehog-client.js";
+import { asyncControlFields, monitorTypeSchema } from "../schemas.js";
+import type { ToolInput } from "../types.js";
 import {
-  idempotencyField,
-  monitorTypeSchema,
-  waitFields,
-} from '../schemas.js';
-import type { ToolInput } from '../types.js';
-import { workflowToolAnnotations, type WorkflowToolDefinition } from './types.js';
+  workflowToolAnnotations,
+  type WorkflowToolDefinition,
+} from "./types.js";
 import {
   clampInt,
   continuationForStep,
@@ -17,13 +16,13 @@ import {
   runWorkflowStep,
   workflowIdempotencyKey,
   workflowSummary,
-} from './helpers.js';
+} from "./helpers.js";
 
 export const monitoringWorkflowTools: WorkflowToolDefinition[] = [
   {
-    name: 'monitor_topic',
+    name: "monitor_topic",
     description:
-      'Create one or more monitors for a topic, person, company, profile, or post, optionally trigger an immediate run, and list recent events. This may consume The Hog credits when monitors run. Defaults: web_search source, 60 minute cadence, 10 results, and no immediate run.',
+      "Create one or more monitors for a topic, person, company, profile, or post, optionally trigger an immediate run, and list recent events. This may consume The Hog credits when monitors run. Defaults: web_search source, 60 minute cadence, 10 results, and no immediate run.",
     inputSchema: {
       name: z.string().min(1).max(256),
       topic: z.string().min(1).max(500),
@@ -34,8 +33,7 @@ export const monitoringWorkflowTools: WorkflowToolDefinition[] = [
       forceFresh: z.boolean().optional(),
       postUrl: z.string().min(1).max(1000).optional(),
       site: z.string().min(1).max(300).optional(),
-      ...waitFields,
-      ...idempotencyField,
+      ...asyncControlFields,
     },
     annotations: workflowToolAnnotations,
     execute: monitorTopic,
@@ -43,7 +41,7 @@ export const monitoringWorkflowTools: WorkflowToolDefinition[] = [
 ];
 
 async function monitorTopic(input: ToolInput, client: TheHogToolClient) {
-  const ctx = createWorkflowContext('monitor_topic');
+  const ctx = createWorkflowContext("monitor_topic");
   const sources = readSources(input.sources);
   validateMonitorWorkflowInput(sources, input);
   const created: unknown[] = [];
@@ -54,8 +52,8 @@ async function monitorTopic(input: ToolInput, client: TheHogToolClient) {
   for (const source of sources) {
     const createStep = await runWorkflowStep(client, ctx, {
       step: `create_monitor:${source}`,
-      method: 'POST',
-      path: '/api/v1/monitors',
+      method: "POST",
+      path: "/api/v1/monitors",
       body: {
         name: sources.length > 1 ? `${input.name} (${source})` : input.name,
         type: source,
@@ -68,7 +66,7 @@ async function monitorTopic(input: ToolInput, client: TheHogToolClient) {
       idempotencyKey: workflowIdempotencyKey(
         client,
         input,
-        'monitor_topic',
+        "monitor_topic",
         `create_${source}`,
       ),
     });
@@ -76,12 +74,12 @@ async function monitorTopic(input: ToolInput, client: TheHogToolClient) {
       created.push(createStep.final);
     }
 
-    const monitorId = readString(createStep?.final, ['id']);
+    const monitorId = readString(createStep?.final, ["id"]);
     if (!monitorId) {
       ctx.warnings.push({
         step: `run_monitor_now:${source}`,
         message:
-          'The created monitor response did not include an ID, so run and event listing were skipped for this source.',
+          "The created monitor response did not include an ID, so run and event listing were skipped for this source.",
       });
       continue;
     }
@@ -89,7 +87,7 @@ async function monitorTopic(input: ToolInput, client: TheHogToolClient) {
     if (input.runNow === true) {
       const runStep = await runWorkflowStep(client, ctx, {
         step: `run_monitor_now:${source}`,
-        method: 'POST',
+        method: "POST",
         path: `/api/v1/monitors/${encodeURIComponent(monitorId)}/run-now`,
         body: {
           force_fresh: input.forceFresh,
@@ -97,13 +95,13 @@ async function monitorTopic(input: ToolInput, client: TheHogToolClient) {
         idempotencyKey: workflowIdempotencyKey(
           client,
           input,
-          'monitor_topic',
+          "monitor_topic",
           `run_${source}`,
         ),
-        poll: 'operation',
+        poll: "operation",
         ...pollFields(input),
       });
-      const runContinuation = continuationForStep(runStep, 'operation');
+      const runContinuation = continuationForStep(runStep, "operation");
       if (runContinuation) {
         pendingContinuation ??= runContinuation;
       }
@@ -117,7 +115,7 @@ async function monitorTopic(input: ToolInput, client: TheHogToolClient) {
 
     const eventStep = await runWorkflowStep(client, ctx, {
       step: `list_monitor_events:${source}`,
-      method: 'GET',
+      method: "GET",
       path: `/api/v1/monitors/${encodeURIComponent(monitorId)}/events`,
       query: {
         limit: clampInt(input.maxResults, 10, 1, 100),
@@ -145,32 +143,38 @@ async function monitorTopic(input: ToolInput, client: TheHogToolClient) {
 
 function readSources(value: unknown): string[] {
   if (!Array.isArray(value) || value.length === 0) {
-    return ['web_search'];
+    return ["web_search"];
   }
-  return value.filter((item): item is string => typeof item === 'string');
+  return value.filter((item): item is string => typeof item === "string");
 }
 
-function monitorConfig(source: string, input: ToolInput): Record<string, unknown> {
-  if (source.endsWith('_post') && typeof input.postUrl === 'string') {
+function monitorConfig(
+  source: string,
+  input: ToolInput,
+): Record<string, unknown> {
+  if (source.endsWith("_post") && typeof input.postUrl === "string") {
     return { post_url: input.postUrl, query: input.topic };
   }
-  if (source === 'site_search') {
+  if (source === "site_search") {
     return { query: input.topic, site: input.site };
   }
   return { query: input.topic };
 }
 
-function validateMonitorWorkflowInput(sources: string[], input: ToolInput): void {
-  if (sources.includes('site_search') && typeof input.site !== 'string') {
-    throw new Error('site_search monitors require site.');
+function validateMonitorWorkflowInput(
+  sources: string[],
+  input: ToolInput,
+): void {
+  if (sources.includes("site_search") && typeof input.site !== "string") {
+    throw new Error("site_search monitors require site.");
   }
-  const postSources = sources.filter((source) => source.endsWith('_post'));
-  if (postSources.length > 0 && typeof input.postUrl !== 'string') {
-    throw new Error(`${postSources.join(', ')} monitors require postUrl.`);
+  const postSources = sources.filter((source) => source.endsWith("_post"));
+  if (postSources.length > 0 && typeof input.postUrl !== "string") {
+    throw new Error(`${postSources.join(", ")} monitors require postUrl.`);
   }
 }
 
 function cadenceForSource(source: string, value: unknown): number {
-  const minimum = source === 'web_search' || source === 'site_search' ? 15 : 60;
+  const minimum = source === "web_search" || source === "site_search" ? 15 : 60;
   return clampInt(value, 60, minimum, 10080);
 }

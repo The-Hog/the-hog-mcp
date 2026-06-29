@@ -1,14 +1,17 @@
-import { z } from 'zod/v4';
-import type { TheHogToolClient } from '../../client/thehog-client.js';
+import { z } from "zod/v4";
+import type { TheHogToolClient } from "../../client/thehog-client.js";
 import {
-  idempotencyField,
+  asyncControlFields,
   personIdentifierSchema,
   signalsConfigSchema,
-  waitFields,
-} from '../schemas.js';
-import type { ToolInput } from '../types.js';
-import { workflowToolAnnotations, type WorkflowToolDefinition } from './types.js';
+} from "../schemas.js";
+import type { ToolInput } from "../types.js";
 import {
+  workflowToolAnnotations,
+  type WorkflowToolDefinition,
+} from "./types.js";
+import {
+  asyncFirstPollFields,
   clampInt,
   continuationForStep,
   createWorkflowContext,
@@ -21,7 +24,7 @@ import {
   uniqueStrings,
   workflowIdempotencyKey,
   workflowSummary,
-} from './helpers.js';
+} from "./helpers.js";
 
 const contactFieldsSchema = z
   .array(z.string().min(1).max(80))
@@ -34,21 +37,20 @@ const targetAccountFields = {
   companyNames: z.array(z.string().min(1)).max(100).optional(),
   companyLinkedInUrls: z.array(z.string().min(1)).max(100).optional(),
   titles: z.array(z.string().min(1)).max(50).optional(),
-  titleMatch: z.enum(['exact', 'similar']).optional(),
+  titleMatch: z.enum(["exact", "similar"]).optional(),
   locations: z.array(z.string().min(1)).max(50).optional(),
   limit: z.number().int().min(1).max(100).optional(),
   includeContactInfo: z.boolean().optional(),
   contactFields: contactFieldsSchema,
   signals_config: signalsConfigSchema.optional(),
-  ...waitFields,
-  ...idempotencyField,
+  ...asyncControlFields,
 };
 
 export const prospectingWorkflowTools: WorkflowToolDefinition[] = [
   {
-    name: 'build_prospect_list',
+    name: "build_prospect_list",
     description:
-      'Build a prospect list from an ICP. This searches for matching companies, finds relevant people at those companies, and can optionally enrich contacts with email or phone data. This may consume The Hog credits. Defaults: 10 companies, 3 people per company, and polling enabled.',
+      "Build a prospect list from an ICP. This searches for matching companies, finds relevant people at those companies, and can optionally enrich contacts with email or phone data. This may consume The Hog credits. Defaults: 10 companies and 3 people per company. Long steps return continuations unless waitForResult=true is set.",
     inputSchema: {
       companyQuery: z.string().min(1).max(500),
       personQuery: z.string().min(1).max(500),
@@ -57,30 +59,28 @@ export const prospectingWorkflowTools: WorkflowToolDefinition[] = [
       includeContactInfo: z.boolean().optional(),
       contactFields: contactFieldsSchema,
       signals_config: signalsConfigSchema.optional(),
-      ...waitFields,
-      ...idempotencyField,
+      ...asyncControlFields,
     },
     annotations: workflowToolAnnotations,
     execute: buildProspectList,
   },
   {
-    name: 'find_people_at_target_accounts',
+    name: "find_people_at_target_accounts",
     description:
-      'Find people at known target accounts by domain or company name. This may consume The Hog credits and can optionally enrich contacts. Defaults: 25 people and polling enabled.',
+      "Find people at known target accounts by domain or company name. This may consume The Hog credits and can optionally enrich contacts. Defaults: 25 people. Long steps return continuations unless waitForResult=true is set.",
     inputSchema: targetAccountFields,
     annotations: workflowToolAnnotations,
     execute: findPeopleAtTargetAccounts,
   },
   {
-    name: 'enrich_prospect_list',
+    name: "enrich_prospect_list",
     description:
-      'Batch enrich known prospect identifiers with requested contact fields or signals. This may consume The Hog credits and may return an async operation. Defaults to polling for the enrichment result.',
+      "Batch enrich known prospect identifiers with requested contact fields or signals. This may consume The Hog credits and returns a continuation by default; set waitForResult=true to poll inline within the safe timeout budget.",
     inputSchema: {
       identifiers: z.array(personIdentifierSchema).min(1).max(100),
       fields: z.array(z.string().min(1).max(80)).min(1).max(8),
       signals_config: signalsConfigSchema.optional(),
-      ...waitFields,
-      ...idempotencyField,
+      ...asyncControlFields,
     },
     annotations: workflowToolAnnotations,
     execute: enrichProspectList,
@@ -88,15 +88,15 @@ export const prospectingWorkflowTools: WorkflowToolDefinition[] = [
 ];
 
 async function buildProspectList(input: ToolInput, client: TheHogToolClient) {
-  const ctx = createWorkflowContext('build_prospect_list');
+  const ctx = createWorkflowContext("build_prospect_list");
   const companyLimit = clampInt(input.companyLimit, 10, 1, 50);
   const peoplePerCompany = clampInt(input.peoplePerCompany, 3, 1, 20);
   const peopleLimit = Math.min(100, companyLimit * peoplePerCompany);
 
   const companyStep = await runWorkflowStep(client, ctx, {
-    step: 'search_companies',
-    method: 'POST',
-    path: '/api/v1/companies/search',
+    step: "search_companies",
+    method: "POST",
+    path: "/api/v1/companies/search",
     body: {
       query: input.companyQuery,
       limit: companyLimit,
@@ -104,10 +104,10 @@ async function buildProspectList(input: ToolInput, client: TheHogToolClient) {
     idempotencyKey: workflowIdempotencyKey(
       client,
       input,
-      'build_prospect_list',
-      'companies',
+      "build_prospect_list",
+      "companies",
     ),
-    poll: 'operation',
+    poll: "operation",
     ...pollFields(input),
   });
 
@@ -118,20 +118,25 @@ async function buildProspectList(input: ToolInput, client: TheHogToolClient) {
       summary: { companyCount: 0, peopleCount: 0, enrichmentCount: 0 },
     };
   }
-  const companyContinuation = continuationForStep(companyStep, 'operation');
+  const companyContinuation = continuationForStep(companyStep, "operation");
   if (companyContinuation) {
     return companyContinuation;
   }
-  const companies = extractItems(companyStep, ['companies', 'data']);
+  const companies = extractItems(companyStep, ["companies", "data"]);
   if (companies.length === 0) {
     ctx.warnings.push({
-      step: 'search_people',
+      step: "search_people",
       message:
-        'Company search did not return any companies, so downstream prospect discovery was not started.',
+        "Company search did not return any companies, so downstream prospect discovery was not started.",
     });
     return {
       ...workflowSummary(ctx, 1),
-      steps: { companySearch: { ...pollMetadata(companyStep), final: companyStep.final } },
+      steps: {
+        companySearch: {
+          ...pollMetadata(companyStep),
+          final: companyStep.final,
+        },
+      },
       summary: { companyCount: 0, peopleCount: 0, enrichmentCount: 0 },
     };
   }
@@ -139,21 +144,30 @@ async function buildProspectList(input: ToolInput, client: TheHogToolClient) {
   const companyFilters = companyFilterFromItems(companies);
   if (Object.keys(companyFilters).length === 0) {
     ctx.warnings.push({
-      step: 'search_people',
+      step: "search_people",
       message:
-        'Company search returned records without company names, domains, or LinkedIn URLs, so downstream prospect discovery was not started.',
+        "Company search returned records without company names, domains, or LinkedIn URLs, so downstream prospect discovery was not started.",
     });
     return {
       ...workflowSummary(ctx, 1),
-      steps: { companySearch: { ...pollMetadata(companyStep), final: companyStep.final } },
-      summary: { companyCount: companies.length, peopleCount: 0, enrichmentCount: 0 },
+      steps: {
+        companySearch: {
+          ...pollMetadata(companyStep),
+          final: companyStep.final,
+        },
+      },
+      summary: {
+        companyCount: companies.length,
+        peopleCount: 0,
+        enrichmentCount: 0,
+      },
     };
   }
 
   const peopleStep = await runWorkflowStep(client, ctx, {
-    step: 'search_people',
-    method: 'POST',
-    path: '/api/v1/people/search',
+    step: "search_people",
+    method: "POST",
+    path: "/api/v1/people/search",
     body: {
       query: input.personQuery,
       limit: peopleLimit,
@@ -163,64 +177,91 @@ async function buildProspectList(input: ToolInput, client: TheHogToolClient) {
     idempotencyKey: workflowIdempotencyKey(
       client,
       input,
-      'build_prospect_list',
-      'people',
+      "build_prospect_list",
+      "people",
     ),
-    poll: 'operation',
+    poll: "operation",
     ...pollFields(input),
   });
-  const peopleContinuation = continuationForStep(peopleStep, 'operation');
+  const peopleContinuation = continuationForStep(peopleStep, "operation");
   if (peopleContinuation) {
     return peopleContinuation;
   }
 
-  const people = extractItems(peopleStep, ['people', 'data']);
+  const people = extractItems(peopleStep, ["people", "data"]);
   const enrichmentStep =
     input.includeContactInfo === true
-      ? await enrichPeopleFromItems(client, ctx, input, people, 'build_prospect_list')
+      ? await enrichPeopleFromItems(
+          client,
+          ctx,
+          input,
+          people,
+          "build_prospect_list",
+        )
       : null;
-  const enrichmentContinuation = continuationForStep(enrichmentStep, 'enrichment');
+  const enrichmentContinuation = continuationForStep(
+    enrichmentStep,
+    "enrichment",
+  );
   if (enrichmentContinuation) {
     return enrichmentContinuation;
   }
 
   return {
-    ...workflowSummary(ctx, [companyStep, peopleStep, enrichmentStep].filter(Boolean).length),
+    ...workflowSummary(
+      ctx,
+      [companyStep, peopleStep, enrichmentStep].filter(Boolean).length,
+    ),
     steps: {
-      companySearch: { ...pollMetadata(companyStep), final: companyStep?.final },
+      companySearch: {
+        ...pollMetadata(companyStep),
+        final: companyStep?.final,
+      },
       peopleSearch: { ...pollMetadata(peopleStep), final: peopleStep?.final },
       ...(enrichmentStep
-        ? { enrichment: { ...pollMetadata(enrichmentStep), final: enrichmentStep.final } }
+        ? {
+            enrichment: {
+              ...pollMetadata(enrichmentStep),
+              final: enrichmentStep.final,
+            },
+          }
         : {}),
     },
     summary: {
       companyCount: companies.length,
       peopleCount: people.length,
-      enrichmentCount: extractItems(enrichmentStep, ['data', 'results']).length,
+      enrichmentCount: extractItems(enrichmentStep, ["data", "results"]).length,
     },
   };
 }
 
-async function findPeopleAtTargetAccounts(input: ToolInput, client: TheHogToolClient) {
-  const ctx = createWorkflowContext('find_people_at_target_accounts');
+async function findPeopleAtTargetAccounts(
+  input: ToolInput,
+  client: TheHogToolClient,
+) {
+  const ctx = createWorkflowContext("find_people_at_target_accounts");
   const domains = uniqueStrings(readStringArray(input.companyDomains));
   const names = uniqueStrings(readStringArray(input.companyNames));
-  const linkedinUrls = uniqueStrings(readStringArray(input.companyLinkedInUrls));
+  const linkedinUrls = uniqueStrings(
+    readStringArray(input.companyLinkedInUrls),
+  );
   if (domains.length === 0 && names.length === 0 && linkedinUrls.length === 0) {
-    throw new Error('Provide at least one company domain, company name, or company LinkedIn URL.');
+    throw new Error(
+      "Provide at least one company domain, company name, or company LinkedIn URL.",
+    );
   }
 
   const titles = readStringArray(input.titles);
   const titleMatch =
-    input.titleMatch === 'exact' || input.titleMatch === 'similar'
+    input.titleMatch === "exact" || input.titleMatch === "similar"
       ? input.titleMatch
       : undefined;
   const locations = readStringArray(input.locations);
   const query = targetAccountPeopleQuery(titles);
   const peopleStep = await runWorkflowStep(client, ctx, {
-    step: 'search_people',
-    method: 'POST',
-    path: '/api/v1/people/search',
+    step: "search_people",
+    method: "POST",
+    path: "/api/v1/people/search",
     body: {
       query,
       limit: clampInt(input.limit, 25, 1, 100),
@@ -239,18 +280,18 @@ async function findPeopleAtTargetAccounts(input: ToolInput, client: TheHogToolCl
     idempotencyKey: workflowIdempotencyKey(
       client,
       input,
-      'find_people_at_target_accounts',
-      'people',
+      "find_people_at_target_accounts",
+      "people",
     ),
-    poll: 'operation',
+    poll: "operation",
     ...pollFields(input),
   });
-  const peopleContinuation = continuationForStep(peopleStep, 'operation');
+  const peopleContinuation = continuationForStep(peopleStep, "operation");
   if (peopleContinuation) {
     return peopleContinuation;
   }
 
-  const people = extractItems(peopleStep, ['people', 'data']);
+  const people = extractItems(peopleStep, ["people", "data"]);
   const enrichmentStep =
     input.includeContactInfo === true
       ? await enrichPeopleFromItems(
@@ -258,39 +299,50 @@ async function findPeopleAtTargetAccounts(input: ToolInput, client: TheHogToolCl
           ctx,
           input,
           people,
-          'find_people_at_target_accounts',
+          "find_people_at_target_accounts",
         )
       : null;
-  const enrichmentContinuation = continuationForStep(enrichmentStep, 'enrichment');
+  const enrichmentContinuation = continuationForStep(
+    enrichmentStep,
+    "enrichment",
+  );
   if (enrichmentContinuation) {
     return enrichmentContinuation;
   }
 
   return {
-    ...workflowSummary(ctx, [peopleStep, enrichmentStep].filter(Boolean).length),
+    ...workflowSummary(
+      ctx,
+      [peopleStep, enrichmentStep].filter(Boolean).length,
+    ),
     steps: {
       peopleSearch: { ...pollMetadata(peopleStep), final: peopleStep?.final },
       ...(enrichmentStep
-        ? { enrichment: { ...pollMetadata(enrichmentStep), final: enrichmentStep.final } }
+        ? {
+            enrichment: {
+              ...pollMetadata(enrichmentStep),
+              final: enrichmentStep.final,
+            },
+          }
         : {}),
     },
     summary: {
       peopleCount: people.length,
-      enrichmentCount: extractItems(enrichmentStep, ['data', 'results']).length,
+      enrichmentCount: extractItems(enrichmentStep, ["data", "results"]).length,
     },
   };
 }
 
 function targetAccountPeopleQuery(titles: readonly string[]): string {
-  return titles.length > 0 ? titles.join(' OR ') : 'people';
+  return titles.length > 0 ? titles.join(" OR ") : "people";
 }
 
 async function enrichProspectList(input: ToolInput, client: TheHogToolClient) {
-  const ctx = createWorkflowContext('enrich_prospect_list');
+  const ctx = createWorkflowContext("enrich_prospect_list");
   const enrichmentStep = await runWorkflowStep(client, ctx, {
-    step: 'enrich_contacts',
-    method: 'POST',
-    path: '/api/enrichments',
+    step: "enrich_contacts",
+    method: "POST",
+    path: "/api/enrichments",
     body: {
       identifiers: input.identifiers,
       fields: input.fields,
@@ -299,13 +351,16 @@ async function enrichProspectList(input: ToolInput, client: TheHogToolClient) {
     idempotencyKey: workflowIdempotencyKey(
       client,
       input,
-      'enrich_prospect_list',
-      'enrichment',
+      "enrich_prospect_list",
+      "enrichment",
     ),
-    poll: 'enrichment',
-    ...pollFields(input),
+    poll: "enrichment",
+    ...asyncFirstPollFields(input),
   });
-  const enrichmentContinuation = continuationForStep(enrichmentStep, 'enrichment');
+  const enrichmentContinuation = continuationForStep(
+    enrichmentStep,
+    "enrichment",
+  );
   if (enrichmentContinuation) {
     return enrichmentContinuation;
   }
@@ -313,10 +368,13 @@ async function enrichProspectList(input: ToolInput, client: TheHogToolClient) {
   return {
     ...workflowSummary(ctx, enrichmentStep ? 1 : 0),
     steps: {
-      enrichment: { ...pollMetadata(enrichmentStep), final: enrichmentStep?.final },
+      enrichment: {
+        ...pollMetadata(enrichmentStep),
+        final: enrichmentStep?.final,
+      },
     },
     summary: {
-      enrichmentCount: extractItems(enrichmentStep, ['data', 'results']).length,
+      enrichmentCount: extractItems(enrichmentStep, ["data", "results"]).length,
     },
   };
 }
@@ -328,27 +386,34 @@ async function enrichPeopleFromItems(
   people: unknown[],
   workflowName: string,
 ) {
-  const identifiers = people.map(toPersonIdentifier).filter((item) => item !== null);
+  const identifiers = people
+    .map(toPersonIdentifier)
+    .filter((item) => item !== null);
   if (identifiers.length === 0) {
     ctx.warnings.push({
-      step: 'enrich_contacts',
+      step: "enrich_contacts",
       message:
-        'No supported person identifiers were present in the people results, so contact enrichment was skipped.',
+        "No supported person identifiers were present in the people results, so contact enrichment was skipped.",
     });
     return null;
   }
 
   return runWorkflowStep(client, ctx, {
-    step: 'enrich_contacts',
-    method: 'POST',
-    path: '/api/enrichments',
+    step: "enrich_contacts",
+    method: "POST",
+    path: "/api/enrichments",
     body: {
       identifiers: identifiers.slice(0, 100),
-      fields: input.contactFields ?? ['contact.email'],
+      fields: input.contactFields ?? ["contact.email"],
       signals_config: input.signals_config,
     },
-    idempotencyKey: workflowIdempotencyKey(client, input, workflowName, 'enrichment'),
-    poll: 'enrichment',
+    idempotencyKey: workflowIdempotencyKey(
+      client,
+      input,
+      workflowName,
+      "enrichment",
+    ),
+    poll: "enrichment",
     ...pollFields(input),
   });
 }
@@ -360,13 +425,15 @@ function companyFilterFromItems(companies: unknown[]): {
 } {
   const domains = uniqueStrings(
     companies.map((company) =>
-      readString(company, ['domain', 'website_domain', 'websiteDomain']),
+      readString(company, ["domain", "website_domain", "websiteDomain"]),
     ),
   );
-  const names = uniqueStrings(companies.map((company) => readString(company, ['name'])));
+  const names = uniqueStrings(
+    companies.map((company) => readString(company, ["name"])),
+  );
   const linkedinUrls = uniqueStrings(
     companies.map((company) =>
-      readString(company, ['linkedin_url', 'linkedinUrl', 'linkedin']),
+      readString(company, ["linkedin_url", "linkedinUrl", "linkedin"]),
     ),
   );
   return {
@@ -376,27 +443,43 @@ function companyFilterFromItems(companies: unknown[]): {
   };
 }
 
-function toPersonIdentifier(person: unknown):
+function toPersonIdentifier(
+  person: unknown,
+):
   | { linkedin_url: string }
   | { email: string }
   | { x_handle: string }
   | { github_username: string }
   | null {
-  const linkedinUrl = readString(person, ['linkedin_url', 'linkedinUrl', 'linkedin']);
+  const linkedinUrl = readString(person, [
+    "linkedin_url",
+    "linkedinUrl",
+    "linkedin",
+  ]);
   if (linkedinUrl) return { linkedin_url: linkedinUrl };
   const email =
-    readString(person, ['email']) ??
-    readNestedString(person, [['contact', 'email'], ['contacts', 'email']]);
+    readString(person, ["email"]) ??
+    readNestedString(person, [
+      ["contact", "email"],
+      ["contacts", "email"],
+    ]);
   if (email) return { email };
-  const xHandle = readString(person, ['x_handle', 'xHandle', 'twitter']);
+  const xHandle = readString(person, ["x_handle", "xHandle", "twitter"]);
   if (xHandle) return { x_handle: xHandle };
-  const github = readString(person, ['github_username', 'githubUsername', 'github']);
+  const github = readString(person, [
+    "github_username",
+    "githubUsername",
+    "github",
+  ]);
   if (github) return { github_username: github };
   return null;
 }
 
 function readStringArray(value: unknown): string[] {
   return Array.isArray(value)
-    ? value.filter((item): item is string => typeof item === 'string' && item.trim() !== '')
+    ? value.filter(
+        (item): item is string =>
+          typeof item === "string" && item.trim() !== "",
+      )
     : [];
 }

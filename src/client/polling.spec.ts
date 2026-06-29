@@ -1,60 +1,65 @@
-import assert from 'node:assert/strict';
-import test, { mock } from 'node:test';
+import assert from "node:assert/strict";
+import test, { mock } from "node:test";
 import {
   MAX_INLINE_WAIT_SECONDS,
   pollBackoffMsForAttempt,
   pollEnrichment,
   pollOperation,
-} from './polling.js';
-import { TheHogApiError } from './errors.js';
+} from "./polling.js";
+import { TheHogApiError } from "./errors.js";
 
-test('pollOperation treats partial_success as terminal', async () => {
-  const requests: Array<{ method: string; path: string; timeoutMs?: number }> = [];
+test("pollOperation treats partial_success as terminal", async () => {
+  const requests: Array<{ method: string; path: string; timeoutMs?: number }> =
+    [];
   const result = await pollOperation(
     {
-      request: async (request: { method: string; path: string; timeoutMs?: number }) => {
+      request: async (request: {
+        method: string;
+        path: string;
+        timeoutMs?: number;
+      }) => {
         requests.push(request);
         return {
-          data: { id: 'op_1', status: 'partial_success' },
+          data: { id: "op_1", status: "partial_success" },
           status: 200,
-          requestId: 'req_1',
+          requestId: "req_1",
         };
       },
     } as never,
-    'op_1',
+    "op_1",
     { timeoutSeconds: 1, intervalMs: 250 },
   );
 
   assert.equal(result.timedOut, false);
   assert.equal(result.attempts, 1);
-  assert.deepEqual(result.final, { id: 'op_1', status: 'partial_success' });
-  assert.equal(requests[0]?.method, 'GET');
-  assert.equal(requests[0]?.path, '/api/operations/op_1');
-  assert.equal(typeof requests[0]?.timeoutMs, 'number');
+  assert.deepEqual(result.final, { id: "op_1", status: "partial_success" });
+  assert.equal(requests[0]?.method, "GET");
+  assert.equal(requests[0]?.path, "/api/operations/op_1");
+  assert.equal(typeof requests[0]?.timeoutMs, "number");
 });
 
-test('pollOperation treats nested data.status as terminal', async () => {
+test("pollOperation treats nested data.status as terminal", async () => {
   const result = await pollOperation(
     {
       request: async () => ({
-        data: { id: 'op_1', data: { status: 'succeeded', results: [] } },
+        data: { id: "op_1", data: { status: "succeeded", results: [] } },
         status: 200,
-        requestId: 'req_1',
+        requestId: "req_1",
       }),
     } as never,
-    'op_1',
+    "op_1",
     { timeoutSeconds: 1, intervalMs: 250 },
   );
 
   assert.equal(result.timedOut, false);
   assert.equal(result.attempts, 1);
   assert.deepEqual(result.final, {
-    id: 'op_1',
-    data: { status: 'succeeded', results: [] },
+    id: "op_1",
+    data: { status: "succeeded", results: [] },
   });
 });
 
-test('pollOperation continues past nested non-terminal status', async () => {
+test("pollOperation continues past nested non-terminal status", async () => {
   let calls = 0;
   const result = await pollOperation(
     {
@@ -63,67 +68,70 @@ test('pollOperation continues past nested non-terminal status', async () => {
         return {
           data:
             calls === 1
-              ? { id: 'op_1', data: { status: 'running' } }
-              : { id: 'op_1', data: { status: 'succeeded', results: ['done'] } },
+              ? { id: "op_1", data: { status: "running" } }
+              : {
+                  id: "op_1",
+                  data: { status: "succeeded", results: ["done"] },
+                },
           status: 200,
-          requestId: 'req_1',
+          requestId: "req_1",
         };
       },
     } as never,
-    'op_1',
+    "op_1",
     { timeoutSeconds: 1, intervalMs: 250 },
   );
 
   assert.equal(result.timedOut, false);
   assert.equal(result.attempts, 2);
   assert.deepEqual(result.final, {
-    id: 'op_1',
-    data: { status: 'succeeded', results: ['done'] },
+    id: "op_1",
+    data: { status: "succeeded", results: ["done"] },
   });
 });
 
-test('pollOperation returns timedOut after non-terminal responses', async () => {
+test("pollOperation returns timedOut after non-terminal responses", async () => {
   const result = await pollOperation(
     {
       request: async () => {
         return {
-          data: { id: 'op_1', status: 'running' },
+          data: { id: "op_1", status: "running" },
           status: 200,
-          requestId: 'req_1',
+          requestId: "req_1",
         };
       },
     } as never,
-    'op_1',
+    "op_1",
     { timeoutSeconds: 0.001, intervalMs: 250 },
   );
 
   assert.equal(result.timedOut, true);
   assert.equal(result.attempts > 0, true);
   assert.equal(result.nextPollAfterMs, 250);
-  assert.deepEqual(result.final, { id: 'op_1', status: 'running' });
+  assert.deepEqual(result.final, { id: "op_1", status: "running" });
 });
 
-test('pollOperation uses 2s -> 5s -> 10s default polling backoff', () => {
+test("pollOperation uses 2s -> 5s -> 10s default polling backoff", () => {
   assert.equal(pollBackoffMsForAttempt(1), 2_000);
   assert.equal(pollBackoffMsForAttempt(2), 5_000);
   assert.equal(pollBackoffMsForAttempt(3), 10_000);
   assert.equal(pollBackoffMsForAttempt(10), 10_000);
 });
 
-test('pollOperation falls back to safe timing defaults for non-finite options', async () => {
+test("pollOperation falls back to safe timing defaults for non-finite options", async () => {
   const requests: Array<{ timeoutMs?: number }> = [];
   const result = await pollOperation(
     {
       request: async (request: { timeoutMs?: number }) => {
         requests.push(request);
         return {
-          data: { id: 'op_1', status: 'completed' },
+          data: { id: "op_1", status: "completed" },
           status: 200,
-          requestId: 'req_1',
+          requestId: "req_1",
         };
       },
     } as never,
-    'op_1',
+    "op_1",
     { timeoutSeconds: Number.POSITIVE_INFINITY, intervalMs: Number.NaN },
   );
 
@@ -131,49 +139,50 @@ test('pollOperation falls back to safe timing defaults for non-finite options', 
   assert.equal(result.attempts, 1);
   assert.equal(result.nextPollAfterMs, 2_000);
   assert.equal(
-    typeof requests[0]?.timeoutMs === 'number' && Number.isFinite(requests[0].timeoutMs),
+    typeof requests[0]?.timeoutMs === "number" &&
+      Number.isFinite(requests[0].timeoutMs),
     true,
   );
 });
 
-test('pollOperation default inline wait stays under the MCP gateway ceiling', async () => {
+test("pollOperation default inline wait stays under the MCP gateway ceiling", async () => {
   const requests: Array<{ timeoutMs?: number }> = [];
   await pollOperation(
     {
       request: async (request: { timeoutMs?: number }) => {
         requests.push(request);
         return {
-          data: { id: 'op_1', status: 'succeeded' },
+          data: { id: "op_1", status: "succeeded" },
           status: 200,
-          requestId: 'req_1',
+          requestId: "req_1",
         };
       },
     } as never,
-    'op_1',
+    "op_1",
     {},
   );
 
-  assert.equal(typeof requests[0]?.timeoutMs, 'number');
+  assert.equal(typeof requests[0]?.timeoutMs, "number");
   assert.ok(
     (requests[0]?.timeoutMs ?? Number.POSITIVE_INFINITY) <=
       MAX_INLINE_WAIT_SECONDS * 1_000,
   );
 });
 
-test('pollOperation clamps an over-ceiling requested timeout to the gateway ceiling', async () => {
+test("pollOperation clamps an over-ceiling requested timeout to the gateway ceiling", async () => {
   const requests: Array<{ timeoutMs?: number }> = [];
   await pollOperation(
     {
       request: async (request: { timeoutMs?: number }) => {
         requests.push(request);
         return {
-          data: { id: 'op_1', status: 'succeeded' },
+          data: { id: "op_1", status: "succeeded" },
           status: 200,
-          requestId: 'req_1',
+          requestId: "req_1",
         };
       },
     } as never,
-    'op_1',
+    "op_1",
     { timeoutSeconds: 600 },
   );
 
@@ -183,20 +192,53 @@ test('pollOperation clamps an over-ceiling requested timeout to the gateway ceil
   );
 });
 
-test('pollEnrichment default inline wait stays under the MCP gateway ceiling', async () => {
+test("pollOperation applies the timeout budget from the caller start time", async (t) => {
+  const originalNow = Date.now;
+  const now = 1_000_000;
+  Date.now = () => now;
+  t.after(() => {
+    Date.now = originalNow;
+  });
+  const requests: Array<{ timeoutMs?: number }> = [];
+
+  const result = await pollOperation(
+    {
+      request: async (request: { timeoutMs?: number }) => {
+        requests.push(request);
+        return {
+          data: { id: "op_1", status: "running" },
+          status: 200,
+          requestId: "req_1",
+        };
+      },
+    } as never,
+    "op_1",
+    { timeoutSeconds: 1, startedAtMs: now - 2_000 },
+  );
+
+  assert.equal(requests.length, 0);
+  assert.deepEqual(result, {
+    final: null,
+    timedOut: true,
+    attempts: 0,
+    nextPollAfterMs: 2_000,
+  });
+});
+
+test("pollEnrichment default inline wait stays under the MCP gateway ceiling", async () => {
   const requests: Array<{ timeoutMs?: number }> = [];
   await pollEnrichment(
     {
       request: async (request: { timeoutMs?: number }) => {
         requests.push(request);
         return {
-          data: { id: 'enr_1', status: 'succeeded' },
+          data: { id: "enr_1", status: "succeeded" },
           status: 200,
-          requestId: 'req_1',
+          requestId: "req_1",
         };
       },
     } as never,
-    'enr_1',
+    "enr_1",
     {},
   );
 
@@ -206,7 +248,7 @@ test('pollEnrichment default inline wait stays under the MCP gateway ceiling', a
   );
 });
 
-test('pollOperation backs off and continues after a 429 poll response', async () => {
+test("pollOperation backs off and continues after a 429 poll response", async () => {
   let attempts = 0;
   const result = await pollOperation(
     {
@@ -214,31 +256,31 @@ test('pollOperation backs off and continues after a 429 poll response', async ()
         attempts += 1;
         if (attempts === 1) {
           throw new TheHogApiError(
-            'Too many poll requests',
+            "Too many poll requests",
             429,
-            'req_rate_limited',
-            { message: 'Too many poll requests' },
+            "req_rate_limited",
+            { message: "Too many poll requests" },
             1,
           );
         }
         return {
-          data: { id: 'op_1', status: 'succeeded' },
+          data: { id: "op_1", status: "succeeded" },
           status: 200,
-          requestId: 'req_2',
+          requestId: "req_2",
         };
       },
     } as never,
-    'op_1',
+    "op_1",
     { timeoutSeconds: 1, intervalMs: 250 },
   );
 
   assert.equal(result.timedOut, false);
   assert.equal(result.attempts, 2);
-  assert.deepEqual(result.final, { id: 'op_1', status: 'succeeded' });
+  assert.deepEqual(result.final, { id: "op_1", status: "succeeded" });
 });
 
-test('pollOperation waits for Retry-After before polling again after a 429', async (t) => {
-  mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 0 });
+test("pollOperation waits for Retry-After before polling again after a 429", async (t) => {
+  mock.timers.enable({ apis: ["Date", "setTimeout"], now: 0 });
   t.after(() => mock.timers.reset());
 
   const requestTimes: number[] = [];
@@ -250,21 +292,21 @@ test('pollOperation waits for Retry-After before polling again after a 429', asy
         attempts += 1;
         if (attempts === 1) {
           throw new TheHogApiError(
-            'Too many poll requests',
+            "Too many poll requests",
             429,
-            'req_rate_limited',
-            { message: 'Too many poll requests' },
+            "req_rate_limited",
+            { message: "Too many poll requests" },
             1_000,
           );
         }
         return {
-          data: { id: 'op_1', status: 'succeeded' },
+          data: { id: "op_1", status: "succeeded" },
           status: 200,
-          requestId: 'req_2',
+          requestId: "req_2",
         };
       },
     } as never,
-    'op_1',
+    "op_1",
     { timeoutSeconds: 3, intervalMs: 250 },
   );
 
@@ -285,31 +327,31 @@ test('pollOperation waits for Retry-After before polling again after a 429', asy
   assert.deepEqual(requestTimes, [0, 1_000]);
 });
 
-test('pollOperation returns Retry-After cadence when 429 persists through timeout', async () => {
+test("pollOperation returns Retry-After cadence when 429 persists through timeout", async () => {
   const result = await pollOperation(
     {
       request: async () => {
         throw new TheHogApiError(
-          'Too many poll requests',
+          "Too many poll requests",
           429,
-          'req_rate_limited',
-          { message: 'Too many poll requests' },
+          "req_rate_limited",
+          { message: "Too many poll requests" },
           250,
         );
       },
     } as never,
-    'op_1',
+    "op_1",
     { timeoutSeconds: 0.001 },
   );
 
   assert.equal(result.timedOut, true);
   assert.equal(result.nextPollAfterMs, 250);
   assert.deepEqual(result.final, {
-    status: 'rate_limited',
+    status: "rate_limited",
     error: {
       status: 429,
-      message: 'Too many poll requests',
-      requestId: 'req_rate_limited',
+      message: "Too many poll requests",
+      requestId: "req_rate_limited",
       retryAfterSeconds: 1,
     },
   });
